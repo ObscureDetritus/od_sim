@@ -1,0 +1,502 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MapGen</title>
+<link rel="stylesheet" href="../../shared/ui.css">
+<style>
+#brush button { justify-content: center; padding: 0 10px; }
+@media (max-width: 1000px) { #brush .lbl { display: none; } #brush button { padding: 0 9px; } }
+.chipglyph { width: 12px; height: 12px; display: block; }
+#work { background: transparent; position: relative; overflow: hidden; min-width: 0; }
+#work canvas { display: block; }
+#text { margin: 0; padding: 6px 8px; background: var(--well); border: 1px solid var(--well-border); border-radius: 2px;
+  font: 11px/1 var(--mono); color: var(--ink); white-space: pre; overflow-x: auto; user-select: text; }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute">
+  <symbol id="i-home" viewBox="0 0 16 16"><rect x="2" y="2" width="5" height="5"/><rect x="9" y="2" width="5" height="5"/><rect x="2" y="9" width="5" height="5"/><rect x="9" y="9" width="5" height="5"/></symbol>
+  <symbol id="i-new" viewBox="0 0 16 16"><path d="M4 1.5h5.5L12.5 4.5V14.5H4z M9.5 1.5v3h3"/></symbol>
+  <symbol id="i-open" viewBox="0 0 16 16"><path d="M1.5 4.5v8.5h13V6H7.5L6 4.5z M1.5 4.5V3h4l1 1.5"/></symbol>
+  <symbol id="i-undo" viewBox="0 0 16 16"><path d="M5 3.5L2 6.5l3 3 M2 6.5h7.5a4 4 0 0 1 0 8H7"/></symbol>
+  <symbol id="i-redo" viewBox="0 0 16 16"><path d="M11 3.5l3 3-3 3 M14 6.5H6.5a4 4 0 0 0 0 8H9"/></symbol>
+  <symbol id="i-down" viewBox="0 0 16 16"><path d="M8 2v8 M4.5 7L8 10.5 11.5 7 M2.5 13.5h11"/></symbol>
+  <symbol id="i-chev" viewBox="0 0 12 12"><path d="M4.5 3L7.5 6 4.5 9"/></symbol>
+  <symbol id="i-minus" viewBox="0 0 12 12"><path d="M3 6h6"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 12 12"><path d="M3 6h6 M6 3v6"/></symbol>
+  <symbol id="i-pencil" viewBox="0 0 16 16"><path d="M10.5 2.5l3 3-8 8H2.5v-3z M9 4l3 3"/></symbol>
+  <symbol id="i-rect" viewBox="0 0 16 16"><rect x="2.5" y="3.5" width="11" height="9"/></symbol>
+  <symbol id="i-room" viewBox="0 0 16 16"><rect x="2.5" y="3.5" width="11" height="9"/><rect x="5" y="6" width="6" height="4"/></symbol>
+  <symbol id="i-fill" viewBox="0 0 16 16"><path d="M3 8.5L8 3.5l5 5-5 5z M12.5 11.5c0 1 .7 1.6 1 2"/></symbol>
+</svg>
+
+<div id="app">
+  <div id="toolbar">
+    <div class="l">
+      <a class="tool" href="../../index.html" title="All tools"><svg class="i"><use href="#i-home"/></svg></a>
+      <div class="vsep"></div>
+      <button class="tool" id="bNew" title="New map"><svg class="i"><use href="#i-new"/></svg></button>
+      <button class="tool" id="bOpen" title="Open .json or .txt"><svg class="i"><use href="#i-open"/></svg></button>
+      <div class="vsep"></div>
+      <button class="tool" id="bUndo" title="Undo (⌘Z)"><svg class="i"><use href="#i-undo"/></svg></button>
+      <button class="tool" id="bRedo" title="Redo (⇧⌘Z)"><svg class="i"><use href="#i-redo"/></svg></button>
+      <input type="file" id="file" accept=".json,.txt" hidden>
+    </div>
+    <div class="seg" id="brush"></div>
+    <div class="r">
+      <button class="ui-btn primary" id="bExport"><svg class="i"><use href="#i-down"/></svg>Export</button>
+      <div class="menu" id="mExport">
+        <button data-x="copy">Copy text</button>
+        <button data-x="txt">Download .txt</button>
+        <button data-x="json">Download .json</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="main">
+    <div id="work"><canvas id="cv"></canvas></div>
+    <div id="side">
+      <div class="section">
+        <div class="sec-head">Tool</div>
+        <div class="sec-body">
+          <div class="seg wide" id="tools">
+            <button data-t="pencil" title="Pencil (B) · right-drag erases"><svg class="i"><use href="#i-pencil"/></svg></button>
+            <button data-t="rect" title="Rectangle (R) · fills with the brush"><svg class="i"><use href="#i-rect"/></svg></button>
+            <button data-t="room" title="Room (M) · wall outline with floor inside"><svg class="i"><use href="#i-room"/></svg></button>
+            <button data-t="fill" title="Fill (F)"><svg class="i"><use href="#i-fill"/></svg></button>
+          </div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="sec-head">Grid</div>
+        <div class="sec-body">
+          <div class="row slider"><label title="Columns">Width</label><input type="range" id="rW" min="4" max="64"><input class="ui-field num" id="nW"></div>
+          <div class="row slider"><label title="Rows">Height</label><input type="range" id="rH" min="4" max="64"><input class="ui-field num" id="nH"></div>
+          <div class="row"><label title="Show cell lines (G)">Lines</label><div><button class="switch" id="swGrid"></button></div></div>
+        </div>
+      </div>
+
+      <div class="section collapsible open" id="secText">
+        <div class="sec-head fold"><svg class="i s chev"><use href="#i-chev"/></svg>Text</div>
+        <div class="sec-body">
+          <div class="row"><label title="Print every glyph twice so cells read square">Double</label><div><button class="switch" id="swDouble"></button></div></div>
+          <pre id="text"></pre>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="status">
+    <div class="cell"><i class="led" id="led"></i><span id="sPos">–</span></div>
+    <div class="cell" id="sCounts"></div>
+    <div class="cell grow"></div>
+    <div class="cell" id="sSize"></div>
+    <div class="cell zoom">
+      <button id="zOut" title="Zoom out"><svg class="i s"><use href="#i-minus"/></svg></button>
+      <span id="sZoom" title="Reset view (0) · scroll to pan · pinch or ⌘-scroll to zoom · space-drag to pan">100%</span>
+      <button id="zIn" title="Zoom in"><svg class="i s"><use href="#i-plus"/></svg></button>
+    </div>
+  </div>
+</div>
+
+<script>
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+// ---------------------------------------------------------------- model
+const TYPES = ['empty', 'wall', 'floor', 'door', 'corridor', 'stairs'];
+const LABEL = { empty: 'Empty', wall: 'Wall', floor: 'Floor', door: 'Door', corridor: 'Corridor', stairs: 'Stairs' };
+const CANON = { empty: ' ', wall: '#', floor: '.', door: '+', corridor: ':', stairs: '%' };   // glyph-independent save format
+// The PC Rogue look (1985, CGA colours): brown double-line walls, ╬ doors, green · floor, grey ▒ corridors,
+// stairs as a black ≡ on a green cell.
+const G = { empty: ' ', wall: '╬', floor: '·', door: '╬', corridor: '▒', stairs: '≡' };
+const LOOK = { paper: '#000000', ink: '#aaaaaa', void: '#3a3a3a',
+  fg: { empty: '#000000', wall: '#aa5500', floor: '#55ff55', door: '#aa5500', corridor: '#aaaaaa', stairs: '#000000' },
+  bg: { stairs: '#00aa00' } };
+const KEY = 'od.mapeditor.v3';
+
+let S = {
+  w: 16, h: 16, cells: new Array(256).fill(0),
+  brush: 1, tool: 'pencil', grid: true, double: true, zoom: 1,
+};
+try {
+  const saved = JSON.parse(localStorage.getItem(KEY)) || JSON.parse(localStorage.getItem('od.mapeditor.v2'));
+  if (saved && saved.cells) S = { ...S, w: saved.w, h: saved.h, cells: saved.cells, brush: saved.brush ?? 1,
+    tool: saved.tool ?? 'pencil', grid: saved.grid ?? true, double: saved.double ?? true, zoom: saved.zoom ?? 1 };
+} catch {}
+const persist = () => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch {} };
+
+const at = (x, y) => (x < 0 || y < 0 || x >= S.w || y >= S.h) ? 0 : S.cells[y * S.w + x];
+
+// Walls: CP437 double lines that join to neighbouring walls and doors.
+// Walls with no floor, door or corridor around them are buried rock and draw as empty.
+const BOX = { 0: '■', 1: '║', 4: '║', 5: '║', 2: '═', 8: '═', 10: '═', 6: '╔', 12: '╗', 3: '╚', 9: '╝',
+              7: '╠', 13: '╣', 14: '╦', 11: '╩', 15: '╬' };
+function exposed(x, y) {
+  for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) { const v = at(x + dx, y + dy); if (v >= 2) return true; }
+  return false;
+}
+const joins = (x, y) => (at(x, y) === 1 && exposed(x, y)) || at(x, y) === 3;
+function wallMask(x, y) {
+  return (joins(x, y - 1) ? 1 : 0) | (joins(x + 1, y) ? 2 : 0) | (joins(x, y + 1) ? 4 : 0) | (joins(x - 1, y) ? 8 : 0);
+}
+// -> [glyph, tile type used for colour, connects east (for double-width text)]
+function cellLook(x, y) {
+  const t = TYPES[at(x, y)];
+  if (t === 'empty') return [' ', 'empty', false];
+  if (t === 'wall') {
+    if (!exposed(x, y)) return [' ', 'empty', false];
+    const m = wallMask(x, y);
+    return [BOX[m], 'wall', !!(m & 2)];
+  }
+  if (t === 'door') return [G.door, 'door', joins(x + 1, y)];
+  return [G[t], t, false];
+}
+
+// ---------------------------------------------------------------- undo
+const undo = [], redo = [];
+function checkpoint() { undo.push(S.cells.slice()); if (undo.length > 200) undo.shift(); redo.length = 0; syncUndo(); }
+function restore(from, to) { if (!from.length) return; to.push(S.cells.slice()); S.cells = from.pop(); changed(); syncUndo(); }
+function syncUndo() { bUndo.disabled = !undo.length; bRedo.disabled = !redo.length; }
+
+// ---------------------------------------------------------------- tile drawing
+// Tiles are drawn as exact shapes on the pixel grid (like a bitmap tileset), so every tile sits dead
+// centre in its cell whatever fonts are installed. The text export still uses the CP437 characters.
+const FONT = getComputedStyle(document.documentElement).getPropertyValue('--mono');
+function drawTile(c, t, mask, x, y, w, h) {
+  if (t === 'empty') return;
+  const col = LOOK.fg[t], r = (v) => Math.round(v);
+  if (t === 'stairs') {                                   // ≡ : three black bars on a green cell
+    c.fillStyle = LOOK.bg.stairs; c.fillRect(x, y, w, h);
+    const bw = r(w * .6), bh = Math.max(1, r(h * .1)), gap = Math.max(1, r(h * .12));
+    const bx = x + r((w - bw) / 2), by = y + r((h - (3 * bh + 2 * gap)) / 2);
+    c.fillStyle = col; for (let i = 0; i < 3; i++) c.fillRect(bx, by + i * (bh + gap), bw, bh);
+    return;
+  }
+  if (t === 'floor') {                                    // · : one centred square dot
+    const d = Math.max(1, r(Math.min(w, h) * .16));
+    c.fillStyle = col; c.fillRect(x + r((w - d) / 2), y + r((h - d) / 2), d, d);
+    return;
+  }
+  if (t === 'corridor') {                                 // ▒ : 50% checker dither
+    const n = Math.min(w, h) >= 24 ? 8 : 4;
+    c.fillStyle = col;
+    for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) if ((i + j) % 2 === 0) {
+      const x0 = x + r(i * w / n), x1 = x + r((i + 1) * w / n), y0 = y + r(j * h / n), y1 = y + r((j + 1) * h / n);
+      c.fillRect(x0, y0, x1 - x0, y1 - y0);
+    }
+    return;
+  }
+  // wall / door: a double line drawn as a hollow "pipe" from the centre to each connected edge.
+  // Doors are a full cross (╬).
+  const m = t === 'door' ? 15 : mask, cx = x + w / 2, cy = y + h / 2, s = Math.min(w, h);
+  const lw = Math.max(1, r(s / 9)), gap = Math.max(2, r(s * .3));
+  const path = () => {
+    c.beginPath();
+    if (m === 0) { c.moveTo(cx - .01, cy); c.lineTo(cx + .01, cy); }   // lone pillar
+    if (m & 1) { c.moveTo(cx, cy); c.lineTo(cx, y - 1); }
+    if (m & 2) { c.moveTo(cx, cy); c.lineTo(x + w + 1, cy); }
+    if (m & 4) { c.moveTo(cx, cy); c.lineTo(cx, y + h + 1); }
+    if (m & 8) { c.moveTo(cx, cy); c.lineTo(x - 1, cy); }
+  };
+  c.save(); c.beginPath(); c.rect(x, y, w, h); c.clip();
+  c.lineCap = 'square';
+  path(); c.strokeStyle = col; c.lineWidth = gap + lw; c.stroke();
+  path(); c.strokeStyle = LOOK.paper; c.lineWidth = Math.max(.5, gap - lw); c.stroke();
+  c.restore();
+}
+
+// ---------------------------------------------------------------- main canvas
+const work = document.getElementById('work'), cv = document.getElementById('cv'), ctx = cv.getContext('2d');
+let cell = 24, ox = 0, oy = 0, CW = 0, CH = 0, hover = null, drag = null;
+let panX = 0, panY = 0, spaceDown = false;
+const ZMIN = .25, ZMAX = 8;
+const VOID = 'VOID';
+
+// The canvas fills the whole work area. The map sits centred on the same grid; every cell outside it spells VOID.
+function layout() {
+  CW = work.clientWidth; CH = work.clientHeight;
+  const dpr = devicePixelRatio || 1;
+  cv.width = CW * dpr; cv.height = CH * dpr;
+  cv.style.width = CW + 'px'; cv.style.height = CH + 'px';
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  place();
+}
+const fitCell = () => Math.min(CW / (S.w + 2), CH / (S.h + 2));
+function place() {
+  cell = Math.max(2, fitCell() * S.zoom);
+  ox = Math.round((CW - S.w * cell) / 2 + panX); oy = Math.round((CH - S.h * cell) / 2 + panY);
+  draw();
+}
+// Zoom keeping the map point under (mx, my) fixed on screen.
+function zoomTo(z, mx = CW / 2, my = CH / 2) {
+  z = Math.min(ZMAX, Math.max(ZMIN, z));
+  const wx = (mx - ox) / cell, wy = (my - oy) / cell, c2 = Math.max(2, fitCell() * z);
+  panX = mx - wx * c2 - (CW - S.w * c2) / 2; panY = my - wy * c2 - (CH - S.h * c2) / 2;
+  S.zoom = z; sZoom.textContent = Math.round(z * 100) + '%'; place(); persist();
+}
+function resetView() { panX = panY = 0; zoomTo(1); panX = panY = 0; place(); }
+
+function draw() {
+  ctx.clearRect(0, 0, CW, CH);                                   // VOID area lets the page background through
+  ctx.fillStyle = LOOK.paper; ctx.fillRect(ox, oy, S.w * cell, S.h * cell);
+  const x0 = -Math.ceil(ox / cell), y0 = -Math.ceil(oy / cell);
+  const x1 = Math.ceil((CW - ox) / cell), y1 = Math.ceil((CH - oy) / cell);
+
+  ctx.fillStyle = LOOK.void; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.font = `${Math.round(cell * .62)}px ${FONT}`;
+  if (cell >= 6) for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) {
+    if (x >= 0 && y >= 0 && x < S.w && y < S.h) continue;
+    ctx.fillText(VOID[((x % 4) + 4) % 4], ox + (x + .5) * cell, oy + (y + .55) * cell);
+  }
+
+  const gx = i => Math.round(ox + i * cell), gy = j => Math.round(oy + j * cell);   // snapped cell edges
+  for (let y = 0; y < S.h; y++) for (let x = 0; x < S.w; x++) {
+    const t = TYPES[at(x, y)];
+    if (t === 'empty' || (t === 'wall' && !exposed(x, y))) continue;
+    drawTile(ctx, t, t === 'wall' ? wallMask(x, y) : 15, gx(x), gy(y), gx(x + 1) - gx(x), gy(y + 1) - gy(y));
+  }
+
+  if (S.grid && cell >= 5) {
+    ctx.strokeStyle = 'rgba(255,255,255,.07)'; ctx.lineWidth = 1; ctx.beginPath();
+    for (let x = x0; x <= x1; x++) { const px = gx(x) + .5; ctx.moveTo(px, 0); ctx.lineTo(px, CH); }
+    for (let y = y0; y <= y1; y++) { const py = gy(y) + .5; ctx.moveTo(0, py); ctx.lineTo(CW, py); }
+    ctx.stroke();
+  }
+  ctx.strokeStyle = 'rgba(255,255,255,.25)'; ctx.setLineDash([4, 4]); ctx.lineWidth = 1;
+  ctx.strokeRect(ox - .5, oy - .5, S.w * cell + 1, S.h * cell + 1); ctx.setLineDash([]);
+
+  ctx.strokeStyle = css('--accent'); ctx.lineWidth = 2;
+  if (drag && (S.tool === 'rect' || S.tool === 'room')) {
+    const [bx0, by0, bx1, by1] = box(drag.start, drag.cur);
+    ctx.strokeRect(ox + bx0 * cell + 1, oy + by0 * cell + 1, (bx1 - bx0 + 1) * cell - 2, (by1 - by0 + 1) * cell - 2);
+  } else if (hover) {
+    ctx.strokeRect(ox + hover[0] * cell + 1, oy + hover[1] * cell + 1, cell - 2, cell - 2);
+  }
+}
+
+const box = (a, b) => [Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.max(a[0], b[0]), Math.max(a[1], b[1])];
+function cellAt(e) {
+  const r = cv.getBoundingClientRect();
+  const x = Math.floor((e.clientX - r.left - ox) / cell), y = Math.floor((e.clientY - r.top - oy) / cell);
+  return (x >= 0 && y >= 0 && x < S.w && y < S.h) ? [x, y] : null;
+}
+function set(x, y, v) { if (x >= 0 && y >= 0 && x < S.w && y < S.h) S.cells[y * S.w + x] = v; }
+function line(a, b, v) {                       // Bresenham so fast drags leave no gaps
+  let [x0, y0] = a; const [x1, y1] = b, dx = Math.abs(x1 - x0), dy = -Math.abs(y1 - y0);
+  const sx = x0 < x1 ? 1 : -1, sy = y0 < y1 ? 1 : -1; let err = dx + dy;
+  for (;;) { set(x0, y0, v); if (x0 === x1 && y0 === y1) break; const e2 = 2 * err;
+    if (e2 >= dy) { err += dy; x0 += sx; } if (e2 <= dx) { err += dx; y0 += sy; } }
+}
+function flood(x, y, v) {
+  const from = at(x, y); if (from === v) return;
+  const st = [[x, y]];
+  while (st.length) { const [cx, cy] = st.pop();
+    if (cx < 0 || cy < 0 || cx >= S.w || cy >= S.h || at(cx, cy) !== from) continue;
+    set(cx, cy, v); st.push([cx + 1, cy], [cx - 1, cy], [cx, cy + 1], [cx, cy - 1]); }
+}
+
+cv.addEventListener('contextmenu', e => e.preventDefault());
+cv.addEventListener('wheel', e => {
+  e.preventDefault();
+  if (e.ctrlKey || e.metaKey) {
+    const r = cv.getBoundingClientRect();
+    zoomTo(S.zoom * Math.exp(-e.deltaY * .01), e.clientX - r.left, e.clientY - r.top);
+  } else { panX -= e.deltaX; panY -= e.deltaY; place(); }
+}, { passive: false });
+cv.addEventListener('pointerdown', e => {
+  if (spaceDown || e.button === 1) {
+    cv.setPointerCapture(e.pointerId); e.preventDefault();
+    drag = { pan: true, sx: e.clientX, sy: e.clientY, px: panX, py: panY }; cv.style.cursor = 'grabbing'; return;
+  }
+  const c = cellAt(e); if (!c) return;
+  cv.setPointerCapture(e.pointerId);
+  const v = e.button === 2 ? 0 : S.brush;
+  checkpoint();
+  if (S.tool === 'fill') { flood(c[0], c[1], v); changed(); return; }
+  drag = { start: c, cur: c, last: c, v };
+  if (S.tool === 'pencil') { set(c[0], c[1], v); changed(); } else draw();
+});
+cv.addEventListener('pointermove', e => {
+  if (drag && drag.pan) { panX = drag.px + e.clientX - drag.sx; panY = drag.py + e.clientY - drag.sy; place(); return; }
+  const c = cellAt(e);
+  hover = c; sPos.textContent = c ? `${c[0]}, ${c[1]}` : '–';
+  if (drag && c) {
+    drag.cur = c;
+    if (S.tool === 'pencil') { line(drag.last, c, drag.v); drag.last = c; changed(); return; }
+  }
+  draw();
+});
+cv.addEventListener('pointerup', () => {
+  if (!drag) return;
+  if (drag.pan) { drag = null; cv.style.cursor = spaceDown ? 'grab' : ''; return; }
+  if (S.tool === 'rect' || S.tool === 'room') {
+    const [x0, y0, x1, y1] = box(drag.start, drag.cur);
+    for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
+      const edge = x === x0 || x === x1 || y === y0 || y === y1;
+      set(x, y, S.tool === 'rect' ? drag.v : (drag.v === 0 ? 0 : edge ? 1 : 2));
+    }
+  }
+  drag = null; changed();
+});
+cv.addEventListener('pointerleave', () => { hover = null; sPos.textContent = '–'; draw(); });
+
+// ---------------------------------------------------------------- text export
+function asText(double = S.double) {
+  const rows = [];
+  for (let y = 0; y < S.h; y++) {
+    let r = '';
+    for (let x = 0; x < S.w; x++) {
+      const [g, t, east] = cellLook(x, y);
+      if (!double) r += g;
+      else if (t === 'wall' || t === 'door') r += g + (east ? '═' : ' ');   // keep lines continuous
+      else if (t === 'empty' || t === 'floor') r += g + ' ';
+      else r += g + g;
+    }
+    rows.push(r);
+  }
+  return rows.join('\n');
+}
+function asJSON() {
+  const rows = [];
+  for (let y = 0; y < S.h; y++) { let r = ''; for (let x = 0; x < S.w; x++) r += CANON[TYPES[at(x, y)]]; rows.push(r); }
+  return JSON.stringify({ width: S.w, height: S.h, legend: CANON, tiles: rows }, null, 1);
+}
+function download(name, text) {
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], { type: 'text/plain' }));
+  a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+function importText(txt) {
+  let rows, lookup = {}, json = false;
+  try { rows = JSON.parse(txt).tiles; json = true; } catch { rows = txt.replace(/\r/g, '').split('\n').filter(r => r.length); }
+  if (!json) {                                  // text: read it in the current glyphs first, canonical chars as fallback
+    for (const ch of Object.values(BOX)) lookup[ch] = 1;
+    for (const t of TYPES) if (t !== 'wall') lookup[G[t]] = TYPES.indexOf(t);   // ╬ reads as a door
+  }
+  for (const [t, ch] of Object.entries(CANON)) lookup[ch] ??= TYPES.indexOf(t);
+  const chars = rows.map(r => [...r]);
+  const dbl = !json && chars.every(r => r.length % 2 === 0) && (
+    chars.every(r => r.every((c, i) => i % 2 || c === r[i + 1])) ||
+    (chars.every(r => r.every((c, i) => i % 2 === 0 || c === ' ' || c === '═' || c === r[i - 1]))));
+  const grid = dbl ? chars.map(r => r.filter((_, i) => i % 2 === 0)) : chars;
+  checkpoint();
+  S.h = Math.min(64, grid.length); S.w = Math.min(64, Math.max(...grid.map(r => r.length)));
+  S.cells = new Array(S.w * S.h).fill(0);
+  grid.slice(0, S.h).forEach((r, y) => r.slice(0, S.w).forEach((c, x) => set(x, y, lookup[c] ?? 0)));
+  syncControls(); layout(); changed();
+}
+
+// ---------------------------------------------------------------- side panel
+function glyphCanvas(types, s) {
+  const c = document.createElement('canvas'), dpr = devicePixelRatio || 1;
+  c.width = types.length * (s + 3) * dpr; c.height = s * dpr;
+  c.style.width = types.length * (s + 3) - 3 + 'px'; c.style.height = s + 'px';
+  const x = c.getContext('2d'); x.scale(dpr, dpr);
+  types.forEach((t, i) => { x.fillStyle = LOOK.paper; x.fillRect(i * (s + 3), 0, s, s);
+    drawTile(x, t, t === 'wall' ? 6 : 15, i * (s + 3), 0, s, s);
+    x.strokeStyle = 'rgba(255,255,255,.12)'; x.strokeRect(i * (s + 3) + .5, .5, s - 1, s - 1); });
+  return c;
+}
+function buildBrush() {
+  const box = document.getElementById('brush'); box.innerHTML = '';
+  TYPES.forEach((t, i) => {
+    const b = document.createElement('button'); b.className = i === S.brush ? 'on' : ''; b.title = `${LABEL[t]} (${i + 1})`;
+    const c = glyphCanvas([t], 12); c.className = 'chipglyph';
+    const l = document.createElement('span'); l.className = 'lbl'; l.textContent = LABEL[t];
+    b.append(c, l);
+    b.onclick = () => { S.brush = i; buildBrush(); persist(); };
+    box.appendChild(b);
+  });
+}
+function buildTools() {
+  document.querySelectorAll('#tools button').forEach(b => {
+    b.classList.toggle('on', b.dataset.t === S.tool);
+    b.onclick = () => { S.tool = b.dataset.t; buildTools(); persist(); };
+  });
+}
+function bindSwitch(id, key, after) {
+  const el = document.getElementById(id);
+  const sync = () => el.classList.toggle('on', !!S[key]);
+  el.onclick = () => { S[key] = !S[key]; sync(); (after || changed)(); };
+  sync(); return sync;
+}
+function resize(w, h) {
+  w = Math.max(4, Math.min(64, w | 0)); h = Math.max(4, Math.min(64, h | 0));
+  if (w === S.w && h === S.h) return;
+  checkpoint();
+  const next = new Array(w * h).fill(0);
+  for (let y = 0; y < Math.min(h, S.h); y++) for (let x = 0; x < Math.min(w, S.w); x++) next[y * w + x] = at(x, y);
+  S.w = w; S.h = h; S.cells = next; syncControls(); layout(); changed();
+}
+function syncControls() {
+  for (const [r, n, k] of [[rW, nW, 'w'], [rH, nH, 'h']]) {
+    r.value = S[k]; n.value = S[k]; r.style.setProperty('--p', ((S[k] - 4) / 60 * 100) + '%');
+  }
+}
+for (const [r, n, k] of [[rW, nW, 'w'], [rH, nH, 'h']]) {
+  r.oninput = () => resize(k === 'w' ? +r.value : S.w, k === 'h' ? +r.value : S.h);
+  r.ondblclick = () => resize(k === 'w' ? 16 : S.w, k === 'h' ? 16 : S.h);
+  n.onchange = () => resize(k === 'w' ? +n.value : S.w, k === 'h' ? +n.value : S.h);
+  n.onkeydown = e => { if (e.key === 'ArrowUp' || e.key === 'ArrowDown') { e.preventDefault();
+    const d = (e.key === 'ArrowUp' ? 1 : -1) * (e.shiftKey ? 10 : 1);
+    resize(k === 'w' ? S.w + d : S.w, k === 'h' ? S.h + d : S.h); } };
+}
+document.querySelector('#secText .sec-head').onclick = () => secText.classList.toggle('open');
+
+// ---------------------------------------------------------------- toolbar, status, keys
+bUndo.onclick = () => restore(undo, redo);
+bRedo.onclick = () => restore(redo, undo);
+bNew.onclick = () => { checkpoint(); S.cells = new Array(S.w * S.h).fill(0); changed(); };
+bOpen.onclick = () => file.click();
+file.onchange = async () => { if (file.files[0]) importText(await file.files[0].text()); file.value = ''; };
+bExport.onclick = e => { e.stopPropagation(); mExport.classList.toggle('open'); };
+document.addEventListener('click', () => mExport.classList.remove('open'));
+mExport.onclick = async e => {
+  const x = e.target.dataset.x; if (!x) return;
+  if (x === 'copy') { try { await navigator.clipboard.writeText(asText()); } catch {} }
+  if (x === 'txt') download('map.txt', asText() + '\n');
+  if (x === 'json') download('map.json', asJSON());
+};
+zIn.onclick = () => zoomTo(S.zoom * 1.25);
+zOut.onclick = () => zoomTo(S.zoom / 1.25);
+sZoom.onclick = resetView;
+document.addEventListener('keyup', e => { if (e.key === ' ') { spaceDown = false; if (!drag) cv.style.cursor = ''; } });
+
+document.addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT') return;
+  if (e.key === ' ') { e.preventDefault(); if (!spaceDown) { spaceDown = true; if (!drag) cv.style.cursor = 'grab'; } return; }
+  if (e.key === '0' && !e.metaKey && !e.ctrlKey) { resetView(); return; }
+  if ((e.key === '=' || e.key === '+') && !e.metaKey) { zoomTo(S.zoom * 1.25); return; }
+  if (e.key === '-' && !e.metaKey) { zoomTo(S.zoom / 1.25); return; }
+  const mod = e.metaKey || e.ctrlKey;
+  if (mod && e.key.toLowerCase() === 'z') { e.preventDefault(); e.shiftKey ? restore(redo, undo) : restore(undo, redo); return; }
+  if (mod) return;
+  if ('123456'.includes(e.key)) { S.brush = +e.key - 1; buildBrush(); persist(); }
+  const tk = { b: 'pencil', r: 'rect', m: 'room', f: 'fill' }[e.key.toLowerCase()];
+  if (tk) { S.tool = tk; buildTools(); persist(); }
+  if (e.key.toLowerCase() === 'g') { S.grid = !S.grid; syncGrid(); changed(); }
+});
+
+function changed() {
+  draw();
+  document.getElementById('text').textContent = asText();
+  const n = [0, 0, 0, 0, 0, 0]; S.cells.forEach(v => n[v]++);
+  sCounts.innerHTML = `<b>${n[1]}</b>&nbsp;wall <b>${n[2]}</b>&nbsp;floor <b>${n[3]}</b>&nbsp;door <b>${n[4]}</b>&nbsp;corridor <b>${n[5]}</b>&nbsp;stairs`;
+  sSize.textContent = `${S.w} × ${S.h}`;
+  persist();
+}
+
+// ---------------------------------------------------------------- boot
+let syncGrid;
+document.fonts.ready.then(() => {
+  syncGrid = bindSwitch('swGrid', 'grid');
+  bindSwitch('swDouble', 'double');
+  buildBrush(); buildTools(); syncControls(); syncUndo();
+  sZoom.textContent = Math.round(S.zoom * 100) + '%';
+  new ResizeObserver(layout).observe(work);
+  layout(); changed();
+});
+</script>
+</body>
+</html>

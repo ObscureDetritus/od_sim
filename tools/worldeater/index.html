@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>World Eater</title>
+<link rel="stylesheet" href="../../shared/ui.css">
+<style>
+#main { grid-template-columns: minmax(0, 1fr) minmax(0, 44%); }
+#form { overflow-y: auto; border-right: 1px solid var(--edge); }
+#preview { overflow: auto; padding: 12px 14px; }
+#md { margin: 0; font: 11px/1.5 var(--mono); color: var(--ink); white-space: pre-wrap; word-break: break-word; user-select: text; }
+#md .hd { color: var(--value); }
+#toolbar .title { color: var(--value); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.row { grid-template-columns: 76px minmax(0, 1fr); align-items: start; }
+.row > label { padding-top: 4px; }
+textarea.ui-field { height: auto; min-height: 22px; padding: 3px 6px; resize: none; line-height: 1.35; display: block; overflow: hidden; }
+.ui-field::placeholder { color: #4a4a4a; }
+#adder { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px; align-items: end; }
+#adder textarea { min-height: 52px; }
+#adder .ui-btn { height: 26px; }
+#entries { display: flex; flex-direction: column; }
+.entry { display: grid; grid-template-columns: 14px 26px minmax(0, 1fr) 22px; gap: 4px; align-items: start; padding: 3px 0;
+  border-bottom: 1px solid #161616; }
+.entry:last-child { border-bottom: 0; }
+.entry .grip { color: #4a4a4a; cursor: grab; padding-top: 4px; display: flex; justify-content: center; }
+.entry .grip:hover { color: var(--text-dim); }
+.entry .n { color: var(--text-dim); text-align: right; padding-top: 3px; font-variant-numeric: tabular-nums; }
+.entry textarea.ui-field { background: transparent; border-color: transparent; }
+.entry textarea.ui-field:hover { border-color: var(--edge); }
+.entry textarea.ui-field:focus { background: var(--well); border-color: var(--select); }
+.entry .x { width: 22px; height: 22px; padding: 0; background: transparent; border: 0; border-radius: 2px; color: var(--text-dim);
+  display: inline-flex; align-items: center; justify-content: center; }
+.entry .x:hover { background: var(--button-hover); color: var(--text); }
+.entry.dragging { opacity: .35; }
+.entry.over { box-shadow: inset 0 2px 0 var(--accent); }
+.entry.over.below { box-shadow: inset 0 -2px 0 var(--accent); }
+@media (max-width: 760px) { #main { grid-template-columns: 1fr; grid-template-rows: 1fr 40%; } #form { border-right: 0; border-bottom: 1px solid var(--edge); } }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute">
+  <symbol id="i-home" viewBox="0 0 16 16"><rect x="2" y="2" width="5" height="5"/><rect x="9" y="2" width="5" height="5"/><rect x="2" y="9" width="5" height="5"/><rect x="9" y="9" width="5" height="5"/></symbol>
+  <symbol id="i-new" viewBox="0 0 16 16"><path d="M4 1.5h5.5L12.5 4.5V14.5H4z M9.5 1.5v3h3"/></symbol>
+  <symbol id="i-open" viewBox="0 0 16 16"><path d="M1.5 4.5v8.5h13V6H7.5L6 4.5z M1.5 4.5V3h4l1 1.5"/></symbol>
+  <symbol id="i-down" viewBox="0 0 16 16"><path d="M8 2v8 M4.5 7L8 10.5 11.5 7 M2.5 13.5h11"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 12 12"><path d="M3 6h6 M6 3v6"/></symbol>
+  <symbol id="i-x" viewBox="0 0 12 12"><path d="M3.5 3.5l5 5 M8.5 3.5l-5 5"/></symbol>
+  <symbol id="i-grip" viewBox="0 0 12 12"><g stroke-width="2"><path d="M4.5 3h0 M7.5 3h0 M4.5 6h0 M7.5 6h0 M4.5 9h0 M7.5 9h0"/></g></symbol>
+</svg>
+
+<div id="app">
+  <div id="toolbar">
+    <div class="l">
+      <a class="tool" href="../../index.html" title="All tools"><svg class="i"><use href="#i-home"/></svg></a>
+      <div class="vsep"></div>
+      <button class="tool" id="bNew" title="New world"><svg class="i"><use href="#i-new"/></svg></button>
+      <button class="tool" id="bOpen" title="Open a world .md"><svg class="i"><use href="#i-open"/></svg></button>
+      <input type="file" id="file" accept=".md,.markdown,.txt" hidden>
+    </div>
+    <div class="title" id="title"></div>
+    <div class="r">
+      <button class="ui-btn primary" id="bExport"><svg class="i"><use href="#i-down"/></svg>Export</button>
+      <div class="menu" id="mExport">
+        <button data-x="copy">Copy markdown</button>
+        <button data-x="md">Download world.md</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="main">
+    <div id="form">
+      <div class="section">
+        <div class="sec-head">World</div>
+        <div class="sec-body">
+          <div class="row"><label title="The file's heading">Heading</label><input class="ui-field" id="fTitle"></div>
+          <div class="row"><label title="Tells the agents what this list is">Intro</label><textarea class="ui-field" id="fIntro" rows="2"></textarea></div>
+        </div>
+      </div>
+      <div class="section">
+        <div class="sec-head">Facts</div>
+        <div class="sec-body">
+          <div id="adder">
+            <textarea class="ui-field" id="fNew" rows="2" placeholder="The well hums at night. Anyone who drinks from it forgets one room."
+              title="Enter adds the fact · Shift+Enter for a new line"></textarea>
+            <button class="ui-btn primary" id="bAdd" title="Add (Enter)"><svg class="i s"><use href="#i-plus"/></svg>Add</button>
+          </div>
+          <div id="entries"></div>
+        </div>
+      </div>
+    </div>
+    <div id="preview"><pre id="md"></pre></div>
+  </div>
+
+  <div id="status">
+    <div class="cell"><i class="led"></i><span id="sCount"></span></div>
+    <div class="cell">world.md</div>
+    <div class="cell grow"></div>
+    <div class="cell" id="sWords"></div>
+  </div>
+</div>
+
+<script>
+// ---------------------------------------------------------------- model
+const KEY = 'od.worldeater.v1';
+const DEFAULT_INTRO = 'Collective knowledge: facts every agent already knows before arriving in the play.';
+const blank = () => ({ title: 'WORLD', intro: DEFAULT_INTRO, facts: [] });
+let S = blank();
+try { const saved = JSON.parse(localStorage.getItem(KEY)); if (saved && Array.isArray(saved.facts)) S = { ...blank(), ...saved }; } catch {}
+const persist = () => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch {} };
+
+// ---------------------------------------------------------------- markdown
+function toMarkdown() {
+  const L = [`# ${S.title.trim() || 'WORLD'}`, ''];
+  if (S.intro.trim()) L.push(S.intro.trim(), '');
+  S.facts.forEach((f, i) => {
+    const lead = `${i + 1}. `, pad = ' '.repeat(lead.length);       // continuation lines align under the text
+    L.push(lead + f.trim().replace(/\r/g, '').split('\n').join('\n' + pad));
+  });
+  return L.join('\n').replace(/\n+$/, '') + '\n';
+}
+function fromMarkdown(text) {
+  const out = { title: 'WORLD', intro: '', facts: [] }, intro = [];
+  let cur = null;
+  for (const raw of text.replace(/\r/g, '').split('\n')) {
+    let m;
+    if ((m = raw.match(/^#\s+(.*)$/)) && !out.facts.length) { out.title = m[1].trim(); continue; }
+    if ((m = raw.match(/^\s*\d+[.)]\s+(.*)$/))) { cur = [m[1]]; out.facts.push(cur); continue; }
+    if (cur && /^\s+\S/.test(raw)) { cur.push(raw.trim()); continue; }
+    if (!raw.trim()) { cur = null; continue; }
+    if (!out.facts.length) intro.push(raw.trim());
+  }
+  out.intro = intro.join('\n');
+  out.facts = out.facts.map(lines => lines.join('\n'));
+  return out;
+}
+
+// ---------------------------------------------------------------- list
+const $ = s => document.querySelector(s);
+const autosize = ta => { ta.style.height = 'auto'; ta.style.height = ta.scrollHeight + 2 + 'px'; };
+let dragFrom = -1;
+
+function renderEntries() {
+  const box = $('#entries'); box.innerHTML = '';
+  S.facts.forEach((text, i) => {
+    const row = document.createElement('div'); row.className = 'entry'; row.dataset.i = i;
+    row.innerHTML = `<span class="grip" draggable="true" title="Drag to reorder"><svg class="i s"><use href="#i-grip"/></svg></span>
+      <span class="n">${i + 1}.</span><textarea class="ui-field" rows="1"></textarea>
+      <button class="x" title="Remove"><svg class="i s"><use href="#i-x"/></svg></button>`;
+    const ta = row.querySelector('textarea'); ta.value = text;
+    ta.oninput = () => { S.facts[i] = ta.value; autosize(ta); changed(); };
+    ta.onblur = () => { if (!ta.value.trim()) { S.facts.splice(i, 1); renderEntries(); changed(); } };   // emptied = removed
+    row.querySelector('.x').onclick = () => { S.facts.splice(i, 1); renderEntries(); changed(); };
+    const grip = row.querySelector('.grip');
+    grip.ondragstart = e => { dragFrom = i; row.classList.add('dragging'); e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', String(i)); e.dataTransfer.setDragImage(row, 10, 10); };
+    grip.ondragend = () => { dragFrom = -1; box.querySelectorAll('.entry').forEach(r => r.classList.remove('dragging', 'over', 'below')); };
+    row.ondragover = e => {
+      if (dragFrom < 0) return; e.preventDefault();
+      const below = e.offsetY > row.offsetHeight / 2;
+      box.querySelectorAll('.entry').forEach(r => r.classList.remove('over', 'below'));
+      row.classList.add('over'); row.classList.toggle('below', below);
+    };
+    row.ondrop = e => {
+      e.preventDefault(); if (dragFrom < 0) return;
+      let to = i + (row.classList.contains('below') ? 1 : 0);
+      const [moved] = S.facts.splice(dragFrom, 1); if (dragFrom < to) to--;
+      S.facts.splice(to, 0, moved); dragFrom = -1; renderEntries(); changed();
+    };
+    box.appendChild(row);
+    requestAnimationFrame(() => autosize(ta));
+  });
+}
+
+function addFact() {
+  const v = $('#fNew').value.trim();
+  if (!v) { $('#fNew').focus(); return; }
+  S.facts.push(v); $('#fNew').value = ''; autosize($('#fNew'));
+  renderEntries(); changed();
+  $('#entries').lastElementChild?.scrollIntoView({ block: 'nearest' });
+  $('#fNew').focus();
+}
+bAdd.onclick = addFact;
+fNew.onkeydown = e => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); addFact(); } };
+fNew.oninput = () => autosize(fNew);
+fTitle.oninput = () => { S.title = fTitle.value; changed(); };
+fIntro.oninput = () => { S.intro = fIntro.value; autosize(fIntro); changed(); };
+
+// ---------------------------------------------------------------- preview, status
+const esc = s => s.replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]);
+function changed() {
+  const md = toMarkdown();
+  $('#md').innerHTML = md.split('\n').map(l => l.startsWith('#') ? `<span class="hd">${esc(l)}</span>` : esc(l)).join('\n');
+  $('#title').textContent = `World: ${S.title.trim() || 'WORLD'}`;
+  $('#sCount').innerHTML = `<b>${S.facts.length}</b>&nbsp;${S.facts.length === 1 ? 'fact' : 'facts'}`;
+  $('#sWords').innerHTML = `<b>${S.facts.join(' ').match(/\S+/g)?.length || 0}</b>&nbsp;words`;
+  persist();
+}
+function renderAll() {
+  fTitle.value = S.title; fIntro.value = S.intro; autosize(fIntro);
+  renderEntries(); changed();
+}
+
+// ---------------------------------------------------------------- toolbar
+bNew.onclick = () => { if (!S.facts.length || confirm('Discard this world and start a new one?')) { S = blank(); renderAll(); } };
+bOpen.onclick = () => file.click();
+file.onchange = async () => { const f = file.files[0]; file.value = ''; if (!f) return; S = fromMarkdown(await f.text()); renderAll(); };
+bExport.onclick = e => { e.stopPropagation(); mExport.classList.toggle('open'); };
+document.addEventListener('click', () => mExport.classList.remove('open'));
+mExport.onclick = async e => {
+  const x = e.target.dataset.x; if (!x) return;
+  const md = toMarkdown();
+  if (x === 'copy') { try { await navigator.clipboard.writeText(md); } catch {} }
+  if (x === 'md') {
+    const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([md], { type: 'text/markdown' }));
+    a.download = 'world.md'; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  }
+};
+
+renderAll();
+fNew.focus();
+</script>
+</body>
+</html>

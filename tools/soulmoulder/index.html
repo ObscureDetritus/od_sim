@@ -1,0 +1,317 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Soul Moulder</title>
+<link rel="stylesheet" href="../../shared/ui.css">
+<style>
+#main { grid-template-columns: minmax(0, 1fr) minmax(0, 44%); }
+#form { overflow-y: auto; border-right: 1px solid var(--edge); }
+#preview { overflow: auto; padding: 12px 14px; }
+#md { margin: 0; font: 11px/1.5 var(--mono); color: var(--ink); white-space: pre-wrap; word-break: break-word; user-select: text; }
+#md .hd { color: var(--value); }
+#toolbar .title { color: var(--value); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.row { grid-template-columns: 110px minmax(0, 1fr); align-items: start; }
+.row > label { padding-top: 4px; }
+.row.slider { grid-template-columns: 110px 1fr 52px; align-items: center; }
+.row.slider > label { padding-top: 0; }
+textarea.ui-field { height: auto; min-height: 44px; padding: 4px 6px; resize: vertical; line-height: 1.35; display: block; }
+.ui-field::placeholder { color: #4a4a4a; }
+.list { display: flex; flex-direction: column; gap: 4px; }
+.item { display: grid; gap: 4px; align-items: center; }
+.item .x { width: 22px; height: 22px; padding: 0; background: transparent; border: 0; border-radius: 2px; color: var(--text-dim);
+  display: inline-flex; align-items: center; justify-content: center; }
+.item .x:hover { background: var(--button-hover); color: var(--text); }
+.ui-add { height: 22px; width: 100%; background: transparent; border: 1px dashed var(--edge); border-radius: 2px; color: var(--text-dim);
+  display: flex; align-items: center; justify-content: center; gap: 5px; }
+.ui-add:hover { background: var(--button); color: var(--text); }
+.section.later .sec-head { color: var(--text-dim); }
+.sec-head.fold { cursor: default; }
+@media (max-width: 760px) { #main { grid-template-columns: 1fr; grid-template-rows: 1fr 40%; } #form { border-right: 0; border-bottom: 1px solid var(--edge); } }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute">
+  <symbol id="i-home" viewBox="0 0 16 16"><rect x="2" y="2" width="5" height="5"/><rect x="9" y="2" width="5" height="5"/><rect x="2" y="9" width="5" height="5"/><rect x="9" y="9" width="5" height="5"/></symbol>
+  <symbol id="i-new" viewBox="0 0 16 16"><path d="M4 1.5h5.5L12.5 4.5V14.5H4z M9.5 1.5v3h3"/></symbol>
+  <symbol id="i-open" viewBox="0 0 16 16"><path d="M1.5 4.5v8.5h13V6H7.5L6 4.5z M1.5 4.5V3h4l1 1.5"/></symbol>
+  <symbol id="i-down" viewBox="0 0 16 16"><path d="M8 2v8 M4.5 7L8 10.5 11.5 7 M2.5 13.5h11"/></symbol>
+  <symbol id="i-chev" viewBox="0 0 12 12"><path d="M4.5 3L7.5 6 4.5 9"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 12 12"><path d="M3 6h6 M6 3v6"/></symbol>
+  <symbol id="i-x" viewBox="0 0 12 12"><path d="M3.5 3.5l5 5 M8.5 3.5l-5 5"/></symbol>
+</svg>
+
+<datalist id="dl-role"><option>Protagonist</option><option>Observer</option><option>Antagonist</option><option>Catalyst</option></datalist>
+<datalist id="dl-att"><option>Deferential</option><option>Suspicious</option><option>Collaborative</option><option>Dismissive</option><option>Protective</option><option>Hostile</option><option>Curious</option></datalist>
+<datalist id="dl-mem"><option>Core Belief</option><option>Event Record</option><option>Spatial Awareness</option></datalist>
+
+<div id="app">
+  <div id="toolbar">
+    <div class="l">
+      <a class="tool" href="../../index.html" title="All tools"><svg class="i"><use href="#i-home"/></svg></a>
+      <div class="vsep"></div>
+      <button class="tool" id="bNew" title="New soul"><svg class="i"><use href="#i-new"/></svg></button>
+      <button class="tool" id="bOpen" title="Open a soul .md"><svg class="i"><use href="#i-open"/></svg></button>
+      <input type="file" id="file" accept=".md,.markdown,.txt" hidden>
+    </div>
+    <div class="title" id="title"></div>
+    <div class="r">
+      <button class="ui-btn primary" id="bExport"><svg class="i"><use href="#i-down"/></svg>Export</button>
+      <div class="menu" id="mExport">
+        <button data-x="copy">Copy markdown</button>
+        <button data-x="md">Download .md</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="main">
+    <div id="form">
+      <div class="section collapsible open">
+        <div class="sec-head fold"><svg class="i s chev"><use href="#i-chev"/></svg>Core identity</div>
+        <div class="sec-body">
+          <div class="row"><label title="Unique identifier or name">Entity ID</label><input class="ui-field" data-k="id" placeholder="Vessel_03"></div>
+          <div class="row"><label title="Protagonist, Observer, Antagonist, Catalyst, or your own">System role</label><input class="ui-field" data-k="role" list="dl-role" placeholder="Catalyst"></div>
+          <div class="row"><label title="The core drive or narrative goal of the agent">Objective</label><textarea class="ui-field" data-k="objective" rows="2" placeholder="Extract information from Entity_B."></textarea></div>
+        </div>
+      </div>
+
+      <div class="section collapsible open">
+        <div class="sec-head fold"><svg class="i s chev"><use href="#i-chev"/></svg>Improvisation and status</div>
+        <div class="sec-body">
+          <div class="row slider"><label title="1 = absolute submissive / reactive, 10 = absolute dominant / proactive">Base status</label>
+            <input type="range" id="rStatus" min="1" max="10" step="1"><input class="ui-field num" id="nStatus"></div>
+          <div class="row"><label title="Triggers that raise or lower the status level">Modifiers</label><div class="list" data-list="modifiers"></div></div>
+          <div class="row"><label title="How this soul treats each other character">Relations</label><div class="list" data-list="relations"></div></div>
+        </div>
+      </div>
+
+      <div class="section collapsible open">
+        <div class="sec-head fold"><svg class="i s chev"><use href="#i-chev"/></svg>Epistemological state</div>
+        <div class="sec-body">
+          <div class="row"><label title="Strictly facts known to the agent before the simulation starts">Origin</label><textarea class="ui-field" data-k="origin" rows="3" placeholder="Woke in the entrance hall. Remembers nothing before the well."></textarea></div>
+          <div class="row"><label title="The filter through which the agent reads what it perceives">Worldview</label><textarea class="ui-field" data-k="worldview" rows="2" placeholder="Every room is a test."></textarea></div>
+          <div class="row"><label title="Known to the agent, never said aloud unless the reveal condition is met">Secrets</label><div class="list" data-list="secrets"></div></div>
+        </div>
+      </div>
+
+      <div class="section collapsible open">
+        <div class="sec-head fold"><svg class="i s chev"><use href="#i-chev"/></svg>Language and output</div>
+        <div class="sec-body">
+          <div class="row"><label title="How it speaks">Syntax and tone</label><input class="ui-field" data-k="tone" placeholder="Clinical, fragmented, metric-focused."></div>
+          <div class="row"><label title="Words it must use, comma separated">Always use</label><input class="ui-field" data-k="include" placeholder="vector, threshold"></div>
+          <div class="row"><label title="Words it must never use, comma separated">Never use</label><input class="ui-field" data-k="exclude" placeholder="feel, hope"></div>
+          <div class="row"><label title="How reasoning and speech are structured in its output">Output format</label><textarea class="ui-field" data-k="format" rows="2"></textarea></div>
+        </div>
+      </div>
+
+      <div class="section collapsible later" title="Fill in once the world and event cycle are defined">
+        <div class="sec-head fold"><svg class="i s chev"><use href="#i-chev"/></svg>Pre-loaded memory</div>
+        <div class="sec-body">
+          <div class="row"><label title="Core beliefs, event records, spatial awareness">Memories</label><div class="list" data-list="memories"></div></div>
+        </div>
+      </div>
+
+      <div class="section collapsible later" title="Fill in once the world and event cycle are defined">
+        <div class="sec-head fold"><svg class="i s chev"><use href="#i-chev"/></svg>Action space and constraints</div>
+        <div class="sec-body">
+          <div class="row"><label title="State changes it may request from the orchestrator">Actions</label><div class="list" data-list="actions"></div></div>
+          <div class="row"><label title="Absolute rules it must not break">Never</label><div class="list" data-list="negatives"></div></div>
+        </div>
+      </div>
+    </div>
+    <div id="preview"><pre id="md"></pre></div>
+  </div>
+
+  <div id="status">
+    <div class="cell"><i class="led" id="led"></i><span id="sFill"></span></div>
+    <div class="cell" id="sFile"></div>
+    <div class="cell grow"></div>
+    <div class="cell" id="sWords"></div>
+  </div>
+</div>
+
+<script>
+// ---------------------------------------------------------------- model
+const KEY = 'od.soulmoulder.v1';
+const DEFAULT_FORMAT = 'Internal reasoning must be enclosed in <thought> tags. Speech must be plain text.';
+const blank = () => ({
+  id: '', role: '', objective: '', status: 5,
+  modifiers: [], relations: [],
+  origin: '', worldview: '', secrets: [],
+  tone: '', include: '', exclude: '', format: DEFAULT_FORMAT,
+  memories: [], actions: [], negatives: [],
+});
+// Repeatable rows: [field, placeholder, column width, datalist]
+const LISTS = {
+  modifiers: { add: 'Modifier', cols: [['amt', '+2', '52px'], ['trigger', 'discussing technology']] },
+  relations: { add: 'Relation', cols: [['target', 'Entity_B'], ['attitude', 'Suspicious', null, 'dl-att']] },
+  secrets:   { add: 'Secret',   cols: [['secret', 'Knows the well is dry'], ['reveal', 'asked twice by the same entity']] },
+  memories:  { add: 'Memory',   cols: [['kind', 'Core Belief', '120px', 'dl-mem'], ['text', 'The environment is structurally unstable.']] },
+  actions:   { add: 'Action',   cols: [['act', 'Move(x,y)']] },
+  negatives: { add: 'Constraint', cols: [['rule', 'Do not acknowledge the physical hardware.']] },
+};
+
+let S = blank();
+try { const saved = JSON.parse(localStorage.getItem(KEY)); if (saved) S = { ...blank(), ...saved }; } catch {}
+const persist = () => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch {} };
+
+// ---------------------------------------------------------------- markdown out (the soul template's exact layout)
+const ml = v => String(v || '').trim().replace(/\r/g, '').split('\n').join('\n    ');   // continuation lines indent 4
+const list = v => String(v || '').split(',').map(s => s.trim()).filter(Boolean);
+const rows = (k) => S[k].filter(r => Object.values(r).some(v => String(v).trim()));
+function toMarkdown() {
+  const L = [];
+  const f = (label, v) => L.push(`*   **${label}:**${String(v ?? '').trim() ? ' ' + ml(v) : ''}`);
+  const sub = (s) => L.push(`    *   ${ml(s)}`);
+  L.push(`# SOUL TEMPLATE: ${S.id.trim() || '[Character_Name]'}`, '');
+  L.push('## 1. Core Identity Definition');
+  f('Entity ID', S.id); f('System Role', S.role); f('Primary Objective Vector', S.objective);
+  L.push('', '## 2. Improvisational Matrix & Status');
+  f('Base Status Level (1-10)', S.status);
+  f('Status Modifiers', ''); rows('modifiers').forEach(r => sub(r.amt.trim() ? `${r.amt.trim()} when ${r.trigger.trim()}` : r.trigger.trim()));
+  f('Relational Dynamics', ''); rows('relations').forEach(r => sub(`*Target ${r.target.trim()}:* ${r.attitude.trim()}`));
+  L.push('', '## 3. Epistemological State (Character Bible)');
+  f('Origin/Prior State', S.origin); f('Worldview/Bias', S.worldview);
+  f('Hidden State (Secrets)', ''); rows('secrets').forEach(r => sub(`${r.secret.trim()}${r.reveal.trim() ? ` — *reveal when:* ${r.reveal.trim()}` : ''}`));
+  L.push('', '## 4. Linguistic & Output Parameters');
+  f('Syntax/Tone', S.tone);
+  f('Lexical Constraints', '');
+  if (list(S.include).length) sub(`*Always use:* ${list(S.include).join(', ')}`);
+  if (list(S.exclude).length) sub(`*Never use:* ${list(S.exclude).join(', ')}`);
+  f('Output Formatting', S.format);
+  L.push('', '## 5. Pre-loaded Memory');
+  rows('memories').forEach((r, i) => f(`Memory_${String(i + 1).padStart(2, '0')} (${r.kind.trim() || 'Note'})`, r.text));
+  L.push('', '## 6. Action Space & Hard Constraints');
+  f('Permitted Interactions', ''); rows('actions').forEach(r => sub(r.act.trim()));
+  f('Negative Constraints', ''); rows('negatives').forEach(r => sub(r.rule.trim()));
+  return L.join('\n') + '\n';
+}
+
+// ---------------------------------------------------------------- markdown in (reads files this tool exported)
+function fromMarkdown(text) {
+  const out = blank(); out.format = '';
+  const fields = [];                                  // [{label, value, subs: []}]
+  let cur = null, lastSub = false;
+  for (const raw of text.replace(/\r/g, '').split('\n')) {
+    let m;
+    if ((m = raw.match(/^\*\s+\*\*(.+?):\*\*\s?(.*)$/))) { cur = { label: m[1], value: m[2], subs: [] }; fields.push(cur); lastSub = false; }
+    else if (cur && (m = raw.match(/^ {4}\*\s+(.*)$/))) { cur.subs.push(m[1]); lastSub = true; }
+    else if (cur && /^ {4}\S/.test(raw)) {             // continuation of a value or sub-item
+      if (lastSub) cur.subs[cur.subs.length - 1] += '\n' + raw.slice(4); else cur.value += '\n' + raw.slice(4);
+    } else if (/^#/.test(raw)) cur = null;
+  }
+  for (const { label, value, subs } of fields) {
+    const v = value.trim(); let m;
+    if (label === 'Entity ID') out.id = v;
+    else if (label === 'System Role') out.role = v;
+    else if (label === 'Primary Objective Vector') out.objective = v;
+    else if (label.startsWith('Base Status Level')) out.status = Math.min(10, Math.max(1, parseInt(v) || 5));
+    else if (label === 'Status Modifiers') out.modifiers = subs.map(s => (m = s.match(/^([+\-−]?\d+)\s+(?:when\s+)?([\s\S]*)$/)) ? { amt: m[1], trigger: m[2] } : { amt: '', trigger: s });
+    else if (label === 'Relational Dynamics') out.relations = subs.map(s => (m = s.match(/^\*Target (.+?):\*\s*([\s\S]*)$/)) ? { target: m[1], attitude: m[2] } : { target: s, attitude: '' });
+    else if (label === 'Origin/Prior State') out.origin = v;
+    else if (label === 'Worldview/Bias') out.worldview = v;
+    else if (label === 'Hidden State (Secrets)') out.secrets = subs.map(s => { const [a, b] = s.split(/\s+—\s+\*reveal when:\*\s*/); return { secret: a, reveal: b || '' }; });
+    else if (label === 'Syntax/Tone') out.tone = v;
+    else if (label === 'Lexical Constraints') for (const s of subs) {
+      if ((m = s.match(/^\*Always use:\*\s*(.*)$/))) out.include = m[1];
+      if ((m = s.match(/^\*Never use:\*\s*(.*)$/))) out.exclude = m[1];
+    }
+    else if (label === 'Output Formatting') out.format = v;
+    else if ((m = label.match(/^Memory_\d+ \((.*)\)$/))) out.memories.push({ kind: m[1], text: v });
+    else if (label === 'Permitted Interactions') out.actions = subs.map(s => ({ act: s }));
+    else if (label === 'Negative Constraints') out.negatives = subs.map(s => ({ rule: s }));
+  }
+  return out;
+}
+
+// ---------------------------------------------------------------- form
+const $ = s => document.querySelector(s);
+function bindScalars() {
+  document.querySelectorAll('[data-k]').forEach(el => {
+    el.value = S[el.dataset.k] ?? '';
+    el.oninput = () => { S[el.dataset.k] = el.value; changed(); };
+  });
+  syncStatus();
+}
+function syncStatus() {
+  rStatus.value = S.status; nStatus.value = S.status;
+  rStatus.style.setProperty('--p', ((S.status - 1) / 9 * 100) + '%');
+}
+rStatus.oninput = () => { S.status = +rStatus.value; syncStatus(); changed(); };
+rStatus.ondblclick = () => { S.status = 5; syncStatus(); changed(); };
+nStatus.onchange = () => { S.status = Math.min(10, Math.max(1, parseInt(nStatus.value) || 5)); syncStatus(); changed(); };
+nStatus.onkeydown = e => { if (e.key === 'ArrowUp' || e.key === 'ArrowDown') { e.preventDefault();
+  S.status = Math.min(10, Math.max(1, S.status + (e.key === 'ArrowUp' ? 1 : -1))); syncStatus(); changed(); } };
+
+function renderList(name) {
+  const box = document.querySelector(`[data-list="${name}"]`), def = LISTS[name];
+  box.innerHTML = '';
+  S[name].forEach((row, i) => {
+    const item = document.createElement('div'); item.className = 'item';
+    item.style.gridTemplateColumns = def.cols.map(c => c[2] || 'minmax(0, 1fr)').join(' ') + ' 22px';
+    for (const [k, ph, , dl] of def.cols) {
+      const inp = document.createElement('input'); inp.className = 'ui-field'; inp.value = row[k] ?? ''; inp.placeholder = ph;
+      if (dl) inp.setAttribute('list', dl);
+      inp.oninput = () => { row[k] = inp.value; changed(); };
+      item.appendChild(inp);
+    }
+    const x = document.createElement('button'); x.className = 'x'; x.title = `Remove ${def.add.toLowerCase()}`;
+    x.innerHTML = '<svg class="i s"><use href="#i-x"/></svg>';
+    x.onclick = () => { S[name].splice(i, 1); renderList(name); changed(); };
+    item.appendChild(x); box.appendChild(item);
+  });
+  const add = document.createElement('button'); add.className = 'ui-add';
+  add.innerHTML = `<svg class="i s"><use href="#i-plus"/></svg>${def.add}`;
+  add.onclick = () => {
+    S[name].push(Object.fromEntries(def.cols.map(c => [c[0], ''])));
+    renderList(name); changed();
+    box.querySelectorAll('.item')[S[name].length - 1]?.querySelector('input')?.focus();
+  };
+  box.appendChild(add);
+}
+const renderAll = () => { bindScalars(); Object.keys(LISTS).forEach(renderList); changed(); };
+
+document.querySelectorAll('.section.collapsible .sec-head').forEach(h => h.onclick = () => h.parentElement.classList.toggle('open'));
+
+// ---------------------------------------------------------------- preview, status
+const esc = s => s.replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]);
+function changed() {
+  const md = toMarkdown();
+  $('#md').innerHTML = md.split('\n').map(l => l.startsWith('#') ? `<span class="hd">${esc(l)}</span>` : esc(l)).join('\n');
+  const name = S.id.trim() || 'Untitled';
+  $('#title').textContent = `Soul: ${name}`;
+  $('#sFile').textContent = fileName();
+  const slots = [S.id, S.role, S.objective, S.origin, S.worldview, S.tone, S.include || S.exclude, S.format]
+    .map(v => !!String(v).trim())
+    .concat(Object.keys(LISTS).map(k => rows(k).length > 0));
+  const filled = slots.filter(Boolean).length + 1;               // base status always has a value
+  $('#sFill').innerHTML = `<b>${filled}</b>&nbsp;/ ${slots.length + 1} fields`;
+  $('#sWords').innerHTML = `<b>${(md.match(/\S+/g) || []).length}</b>&nbsp;words`;
+  persist();
+}
+const fileName = () => (S.id.trim().replace(/[^\w.-]+/g, '_') || 'soul') + '.md';
+
+// ---------------------------------------------------------------- toolbar
+bNew.onclick = () => { if (confirm('Discard this soul and start a new one?')) { S = blank(); renderAll(); } };
+bOpen.onclick = () => file.click();
+file.onchange = async () => {
+  const f = file.files[0]; file.value = ''; if (!f) return;
+  S = fromMarkdown(await f.text()); renderAll();
+};
+bExport.onclick = e => { e.stopPropagation(); mExport.classList.toggle('open'); };
+document.addEventListener('click', () => mExport.classList.remove('open'));
+mExport.onclick = async e => {
+  const x = e.target.dataset.x; if (!x) return;
+  const md = toMarkdown();
+  if (x === 'copy') { try { await navigator.clipboard.writeText(md); } catch {} }
+  if (x === 'md') {
+    const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([md], { type: 'text/markdown' }));
+    a.download = fileName(); a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  }
+};
+
+renderAll();
+</script>
+</body>
+</html>
