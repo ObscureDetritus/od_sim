@@ -35,6 +35,7 @@ textarea.ui-field { height: auto; min-height: 22px; padding: 3px 6px; resize: no
 .entry.dragging { opacity: .35; }
 .entry.over { box-shadow: inset 0 2px 0 var(--accent); }
 .entry.over.below { box-shadow: inset 0 -2px 0 var(--accent); }
+#fTitle, #fIntro { background: transparent; border-color: transparent; padding-left: 0; color: var(--text); }   /* read-only */
 #keyNote { color: var(--text-dim); padding-top: 4px; }
 body.ro .entry .grip, body.ro .entry .x { visibility: hidden; }
 body.ro .entry textarea.ui-field:hover { border-color: transparent; }
@@ -84,8 +85,8 @@ body.ro .entry textarea.ui-field:hover { border-color: transparent; }
       <div class="section">
         <div class="sec-head">World</div>
         <div class="sec-body">
-          <div class="row"><label title="The file's heading">Heading</label><input class="ui-field" id="fTitle"></div>
-          <div class="row"><label title="Tells the agents what this list is">Intro</label><textarea class="ui-field" id="fIntro" rows="2"></textarea></div>
+          <div class="row"><label title="The file's heading">Heading</label><input class="ui-field" id="fTitle" readonly tabindex="-1"></div>
+          <div class="row"><label title="Tells the agents what this list is">Intro</label><textarea class="ui-field" id="fIntro" rows="2" readonly tabindex="-1"></textarea></div>
         </div>
       </div>
       <div class="section">
@@ -149,7 +150,7 @@ function applyOp(w, op) {
   if (op.op === 'remove' && at(op.id) >= 0) w.facts.splice(at(op.id), 1);
   if (op.op === 'move' && at(op.id) >= 0) { const [f] = w.facts.splice(at(op.id), 1); w.facts.splice(Math.min(op.to, w.facts.length), 0, f); }
   if (op.op === 'meta') { if ('title' in op) w.title = op.title; if ('intro' in op) w.intro = op.intro; }
-  if (op.op === 'replace') { w.title = op.title; w.intro = op.intro; w.facts = op.facts.map(t => ({ id: rid(), text: t })); }
+  if (op.op === 'replace') { w.facts = op.facts.map(t => ({ id: rid(), text: t })); }
 }
 
 // ---------------------------------------------------------------- server
@@ -200,14 +201,13 @@ function adopt(w) {
   const sel = focus && 'selectionStart' in focus ? [focus.selectionStart, focus.selectionEnd] : null;
   S = w;
   for (const [id, text] of pending) { const f = S.facts.find(x => x.id === id); if (f) f.text = text; }
-  if (metaPending) Object.assign(S, metaPending);
   persist(); renderAll();
   if (fid) { const ta = document.querySelector(`.entry[data-id="${fid}"] textarea`); if (ta) { ta.focus(); if (sel) ta.setSelectionRange(...sel); } }
   else if (focus && focus.id && focus !== document.body) focus.focus();
 }
 
 // typing is batched: one edit per pause, not per key
-const pending = new Map(), timers = new Map(); let metaPending = null, metaTimer = 0;
+const pending = new Map(), timers = new Map();
 function typed(id, text) {
   const f = S.facts.find(x => x.id === id); if (f) f.text = text;
   pending.set(id, text); clearTimeout(timers.get(id));
@@ -218,12 +218,6 @@ function commitEdit(id) {
   const text = pending.get(id); pending.delete(id);
   queue.push({ op: 'edit', id, text }); flush(); persist();
 }
-function typedMeta(part) {
-  Object.assign(S, part); metaPending = { ...metaPending, ...part }; clearTimeout(metaTimer);
-  metaTimer = setTimeout(() => { const m = metaPending; metaPending = null;
-    queue.push({ op: 'meta', ...m }); flush(); persist(); }, TYPE_MS);
-  preview();
-}
 
 function setMode(m) {
   mode = m;
@@ -232,7 +226,6 @@ function setMode(m) {
   sMode.textContent = m === 'shared' ? (canEdit ? 'shared' : publicAdd ? 'shared · add only' : 'shared · read only') : m === 'local' ? 'offline · this browser only' : 'connecting…';
   sMode.title = m === 'local' ? `Can't reach ${API}. Changes stay in this browser until it's back.` : API;
   [bNew, bOpen].forEach(b => b.disabled = m === 'shared' && !canEdit);
-  [fTitle, fIntro].forEach(t => t.readOnly = m === 'shared' && !canEdit);
   fNew.readOnly = m === 'shared' && !canEdit && !publicAdd;
   fNew.maxLength = m === 'shared' ? 1000 : 4000;   // the server caps visitors' text at 1000 characters
   adder.style.display = fNew.readOnly ? 'none' : '';
@@ -330,8 +323,6 @@ function addFact() {
 bAdd.onclick = addFact;
 fNew.onkeydown = e => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); addFact(); } };
 fNew.oninput = () => autosize(fNew);
-fTitle.oninput = () => typedMeta({ title: fTitle.value });
-fIntro.oninput = () => { typedMeta({ intro: fIntro.value }); autosize(fIntro); };
 
 // ---------------------------------------------------------------- preview, status
 const esc = s => s.replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]);
@@ -343,8 +334,7 @@ function preview() {
   $('#sWords').innerHTML = `<b>${S.facts.map(f => f.text).join(' ').match(/\S+/g)?.length || 0}</b>&nbsp;words`;
 }
 function renderAll() {
-  if (document.activeElement !== fTitle) fTitle.value = S.title;
-  if (document.activeElement !== fIntro) { fIntro.value = S.intro; autosize(fIntro); }
+  fTitle.value = S.title; fIntro.value = S.intro; autosize(fIntro);   // read-only: set on the server
   renderEntries(); preview();
 }
 
@@ -352,14 +342,14 @@ function renderAll() {
 const shareWarn = () => mode === 'shared' ? ' This replaces the shared world for everyone.' : '';
 bNew.onclick = () => {
   if (S.facts.length && !confirm('Discard this world and start a new one?' + shareWarn())) return;
-  send({ op: 'replace', title: 'WORLD', intro: DEFAULT_INTRO, facts: [] });
+  send({ op: 'replace', facts: [] });
 };
 bOpen.onclick = () => file.click();
 file.onchange = async () => {
   const f = file.files[0]; file.value = ''; if (!f) return;
   const w = fromMarkdown(await f.text());
   if (mode === 'shared' && !confirm(`Open ${f.name}?` + shareWarn())) return;
-  send({ op: 'replace', ...w });
+  send({ op: 'replace', facts: w.facts });   // the file's heading and intro are ignored
 };
 bExport.onclick = e => { e.stopPropagation(); mExport.classList.toggle('open'); };
 document.addEventListener('click', () => mExport.classList.remove('open'));

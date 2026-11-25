@@ -16,8 +16,8 @@ Python standard library only. Run it behind an HTTPS proxy (Caddy) on the Contab
        {"op": "edit",    "id": "...", "text": "..."}
        {"op": "remove",  "id": "..."}
        {"op": "move",    "id": "...", "to": 0}
-       {"op": "meta",    "title": "...", "intro": "..."}     (either key optional)
-       {"op": "replace", "title": "...", "intro": "...", "facts": ["...", ...]}
+       {"op": "meta",    "title": "...", "intro": "..."}     (key holders only; either key optional)
+       {"op": "replace", "facts": ["...", ...]}              (title/intro only honoured for key holders)
 
 Environment:
   WORLD_KEY        passphrase for editing (unset = anyone can edit)
@@ -159,8 +159,10 @@ def apply(w, op):
         new = op.get('facts')
         if not isinstance(new, list) or len(new) > MAX_FACTS:
             raise Bad('facts must be a list')
-        w['title'] = text_of(op.get('title', 'WORLD'), 200)
-        w['intro'] = text_of(op.get('intro', ''), MAX_TEXT)
+        if 'title' in op:
+            w['title'] = text_of(op['title'], 200)
+        if 'intro' in op:
+            w['intro'] = text_of(op['intro'], MAX_TEXT)
         w['facts'] = [{'id': secrets.token_hex(6), 'text': t} for t in (text_of(x).strip() for x in new) if t]
     else:
         raise Bad('unknown op')
@@ -236,6 +238,10 @@ class Handler(BaseHTTPRequestHandler):
                 kind = 'add' if op.get('op') == 'add' else 'edit'
                 if KEY and not (PUBLIC_ADD and kind == 'add'):
                     return self.reply(401, {'error': 'wrong or missing key'})
+                if op.get('op') == 'meta':   # heading and intro are read-only for visitors
+                    return self.reply(403, {'error': 'the heading and intro are read-only'})
+                op.pop('title', None)
+                op.pop('intro', None)
                 check_public_sizes(op)
                 if not allow(self.visitor(), kind):
                     return self.reply(429, {'error': 'Too many changes at once. Try again in a minute.'})
