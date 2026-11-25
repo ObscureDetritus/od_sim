@@ -6,9 +6,11 @@ Python standard library only. Run it behind an HTTPS proxy (Caddy) on the Contab
   GET  /world            -> {"rev", "title", "intro", "facts": [{"id", "text"}]}
   GET  /world?since=REV  -> 204 if nothing changed since REV, else the world as above
   GET  /world.md         -> the world as markdown (what agents read)
-  GET  /health           -> {"ok", "rev", "locked"}
+  GET  /health           -> {"ok", "rev", "locked", "public_add"}
   GET  /auth             -> 200 if header X-World-Key is right (or no key is set), else 401
-  POST /world/ops        -> apply one edit, returns the new world. Needs header X-World-Key if WORLD_KEY is set.
+  POST /world/ops        -> apply one edit, returns the new world.
+                            "add" is open to anyone (rate-limited per visitor) when WORLD_PUBLIC_ADD is on;
+                            every other op needs header X-World-Key if WORLD_KEY is set.
        {"op": "add",     "text": "..."}
        {"op": "edit",    "id": "...", "text": "..."}
        {"op": "remove",  "id": "..."}
@@ -18,11 +20,14 @@ Python standard library only. Run it behind an HTTPS proxy (Caddy) on the Contab
 
 Environment:
   WORLD_KEY        passphrase for editing (unset = anyone can edit)
+  WORLD_PUBLIC_ADD 1 (default) = anyone may add facts; 0 = adding needs the key too
+  WORLD_ADD_LIMIT  anonymous adds allowed per visitor: "per_minute,per_day" (default 6,60)
   WORLD_DATA       path of the JSON store (default ./data/world.json)
   WORLD_ORIGINS    comma-separated origins allowed by CORS
   WORLD_HOST/PORT  listen address (default 127.0.0.1:8787)
 """
-import hmac, json, os, re, secrets, tempfile, threading
+import hmac, json, os, re, secrets, tempfile, threading, time
+from collections import defaultdict, deque
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlsplit, parse_qs
 
@@ -31,10 +36,28 @@ DATA = os.environ.get('WORLD_DATA', os.path.join(os.path.dirname(os.path.abspath
 ORIGINS = {o.strip() for o in os.environ.get(
     'WORLD_ORIGINS', 'https://od.declino.systems,http://od.declino.systems,http://localhost:8000,http://127.0.0.1:8000').split(',') if o.strip()}
 HOST, PORT = os.environ.get('WORLD_HOST', '127.0.0.1'), int(os.environ.get('WORLD_PORT', '8787'))
+PUBLIC_ADD = os.environ.get('WORLD_PUBLIC_ADD', '1') != '0'
+PER_MIN, PER_DAY = (int(x) for x in os.environ.get('WORLD_ADD_LIMIT', '6,60').split(','))
+MAX_PUBLIC_TEXT = 1000
 
 MAX_BODY, MAX_TEXT, MAX_FACTS = 256 * 1024, 4000, 2000
 DEFAULT_INTRO = 'Collective knowledge: facts every agent already knows before arriving in the play.'
 lock = threading.Lock()
+recent = defaultdict(deque)   # visitor -> times of their anonymous adds in the last day
+
+
+def allow_add(who):
+    now = time.time()
+    q = recent[who]
+    while q and q[0] < now - 86400:
+        q.popleft()
+    if len(q) >= PER_DAY or sum(1 for t in q if t > now - 60) >= PER_MIN:
+        return False
+    q.append(now)
+    if len(recent) > 10000:   # forget idle visitors so memory stays small
+        for k in [k for k, v in recent.items() if not v or v[-1] < now - 86400]:
+            del recent[k]
+    return True
 
 
 def load():
@@ -173,7 +196,7 @@ class Handler(BaseHTTPRequestHandler):
         if url.path == '/world.md':
             return self.reply(200, to_markdown(w), 'text/markdown; charset=utf-8')
         if url.path == '/health':
-            return self.reply(200, {'ok': True, 'rev': w['rev'], 'locked': bool(KEY)})
+            return self.reply(200, {'ok': True, 'rev': w['rev'], 'locked': bool(KEY), 'public_add': PUBLIC_ADD})
         if url.path == '/auth':   # lets the page check a key before showing edit controls
             ok = not KEY or hmac.compare_digest(self.headers.get('X-World-Key', '').encode(), KEY.encode())
             return self.reply(200 if ok else 401, {'ok': ok})
@@ -182,8 +205,6 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         if urlsplit(self.path).path != '/world/ops':
             return self.reply(404, {'error': 'not found'})
-        if KEY and not hmac.compare_digest(self.headers.get('X-World-Key', '').encode(), KEY.encode()):
-            return self.reply(401, {'error': 'wrong or missing key'})
         n = int(self.headers.get('Content-Length') or 0)
         if n <= 0 or n > MAX_BODY:
             return self.reply(413, {'error': 'body too large or empty'})
@@ -191,6 +212,14 @@ class Handler(BaseHTTPRequestHandler):
             op = json.loads(self.rfile.read(n))
             if not isinstance(op, dict):
                 raise Bad('body must be an object')
+            keyed = not KEY or hmac.compare_digest(self.headers.get('X-World-Key', '').encode(), KEY.encode())
+            if not keyed:
+                if not (PUBLIC_ADD and op.get('op') == 'add'):
+                    return self.reply(401, {'error': 'wrong or missing key'})
+                if isinstance(op.get('text'), str) and len(op['text']) > MAX_PUBLIC_TEXT:
+                    raise Bad(f'facts are limited to {MAX_PUBLIC_TEXT} characters')
+                if not allow_add(self.visitor()):
+                    return self.reply(429, {'error': 'too many facts at once, try again in a minute'})
             with lock:
                 trial = json.loads(json.dumps(WORLD))
                 apply(trial, op)
@@ -205,6 +234,13 @@ class Handler(BaseHTTPRequestHandler):
                 w = json.loads(json.dumps(WORLD))
             return self.reply(409, {'error': str(e), 'world': w})
         self.reply(200, w)
+
+    def visitor(self):
+        # behind Caddy every request comes from 127.0.0.1; Caddy puts the real address in X-Forwarded-For
+        ip = self.client_address[0]
+        if ip in ('127.0.0.1', '::1'):
+            ip = (self.headers.get('X-Forwarded-For', '').split(',')[0].strip() or ip)
+        return ip
 
     def log_message(self, fmt, *args):
         print(f'{self.address_string()} {fmt % args}', flush=True)
