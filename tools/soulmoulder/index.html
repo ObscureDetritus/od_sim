@@ -55,7 +55,7 @@ textarea.ui-field { height: auto; min-height: 44px; padding: 4px 6px; resize: ve
       <button class="tool" id="bOpen" title="Open a soul .md"><svg class="i"><use href="#i-open"/></svg></button>
       <input type="file" id="file" accept=".md,.markdown,.txt" hidden>
     </div>
-    <div class="title" id="title"></div>
+    <div class="title" id="title">Soul Moulder</div>
     <div class="r">
       <button class="ui-btn primary" id="bExport"><svg class="i"><use href="#i-down"/></svg>Export</button>
       <div class="menu" id="mExport">
@@ -279,8 +279,6 @@ const esc = s => s.replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&g
 function changed() {
   const md = toMarkdown();
   $('#md').innerHTML = md.split('\n').map(l => l.startsWith('#') ? `<span class="hd">${esc(l)}</span>` : esc(l)).join('\n');
-  const name = S.id.trim() || 'Untitled';
-  $('#title').textContent = `Soul: ${name}`;
   $('#sFile').textContent = fileName();
   const slots = [S.id, S.role, S.objective, S.origin, S.worldview, S.tone, S.include || S.exclude, S.format]
     .map(v => !!String(v).trim())

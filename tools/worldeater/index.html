@@ -43,6 +43,12 @@ textarea.ui-field { height: auto; min-height: 22px; padding: 3px 6px; resize: no
 #keyNote { color: var(--text-dim); padding-top: 4px; }
 body.ro .entry .grip, body.ro .entry .x { visibility: hidden; }
 body.ro .entry textarea.ui-field:hover { border-color: transparent; }
+#dConfirm { background: #0a0a0a; color: var(--text); border: 1px solid var(--edge); border-radius: 2px; padding: 14px 16px 12px;
+  width: min(360px, calc(100vw - 32px)); box-shadow: 0 8px 30px rgba(0,0,0,.6); }
+#dConfirm::backdrop { background: rgba(0,0,0,.6); }
+#dConfirm p { margin: 0 0 6px; color: var(--value); font-weight: 600; }
+#dConfirm blockquote { margin: 0 0 14px; color: var(--text-dim); max-height: 7.5em; overflow: hidden; white-space: pre-wrap; word-break: break-word; }
+#dConfirm .btns { display: flex; justify-content: flex-end; gap: 6px; }
 @media (max-width: 760px) { #main { grid-template-columns: 1fr; grid-template-rows: 1fr 40%; } #form { border-right: 0; border-bottom: 1px solid var(--edge); } }
 </style>
 </head>
@@ -57,6 +63,14 @@ body.ro .entry textarea.ui-field:hover { border-color: transparent; }
   <symbol id="i-grip" viewBox="0 0 12 12"><g stroke-width="2"><path d="M4.5 3h0 M7.5 3h0 M4.5 6h0 M7.5 6h0 M4.5 9h0 M7.5 9h0"/></g></symbol>
 </svg>
 
+<dialog id="dConfirm">
+  <form method="dialog">
+    <p>Delete this fact for everyone?</p>
+    <blockquote id="dText"></blockquote>
+    <div class="btns"><button class="ui-btn" value="cancel">Cancel</button><button class="ui-btn primary" value="ok">Delete</button></div>
+  </form>
+</dialog>
+
 <div id="app">
   <div id="toolbar">
     <div class="l">
@@ -66,7 +80,7 @@ body.ro .entry textarea.ui-field:hover { border-color: transparent; }
       <button class="tool" id="bOpen" title="Open a world .md"><svg class="i"><use href="#i-open"/></svg></button>
       <input type="file" id="file" accept=".md,.markdown,.txt" hidden>
     </div>
-    <div class="title" id="title"></div>
+    <div class="title" id="title">World Eater</div>
     <div class="r">
       <button class="ui-btn primary" id="bExport"><svg class="i"><use href="#i-down"/></svg>Export</button>
       <div class="menu" id="mExport">
@@ -88,7 +102,7 @@ body.ro .entry textarea.ui-field:hover { border-color: transparent; }
       </div>
       <div class="section">
         <div class="sec-body">
-          <div class="row"><label title="Tells the agents what this list is">Intro</label><textarea class="ui-field" id="fIntro" rows="2" readonly tabindex="-1"></textarea></div>
+          <div class="row"><label title="Tells the agents what this list is">Info</label><textarea class="ui-field" id="fIntro" rows="2" readonly tabindex="-1"></textarea></div>
         </div>
       </div>
       <div class="section">
@@ -292,7 +306,10 @@ function renderEntries() {
     const ta = row.querySelector('textarea'); ta.value = fact.text; ta.readOnly = ro; ta.maxLength = 1000;
     ta.oninput = () => { typed(fact.id, ta.value); autosize(ta); };
     ta.onblur = () => { if (ro) return; commitEdit(fact.id); if (!ta.value.trim()) send({ op: 'remove', id: fact.id }); };   // emptied = removed
-    row.querySelector('.x').onclick = () => { pending.delete(fact.id); send({ op: 'remove', id: fact.id }); };
+    row.querySelector('.x').onclick = async () => {
+      if (!(await confirmDelete(ta.value))) return;
+      pending.delete(fact.id); send({ op: 'remove', id: fact.id });
+    };
     const grip = row.querySelector('.grip');
     grip.ondragstart = e => { dragFrom = i; row.classList.add('dragging'); e.dataTransfer.effectAllowed = 'move';
       e.dataTransfer.setData('text/plain', String(i)); e.dataTransfer.setDragImage(row, 10, 10); };
@@ -314,6 +331,17 @@ function renderEntries() {
   });
 }
 
+// asks before deleting; text goes in as plain text, never as HTML
+function confirmDelete(text) {
+  dText.textContent = text.length > 300 ? text.slice(0, 300) + '…' : text;
+  return new Promise(resolve => {
+    dConfirm.returnValue = 'cancel';
+    dConfirm.addEventListener('close', () => resolve(dConfirm.returnValue === 'ok'), { once: true });
+    dConfirm.showModal();
+    dConfirm.querySelector('button[value="cancel"]').focus();   // Enter or Esc never deletes by accident
+  });
+}
+
 function addFact() {
   const v = $('#fNew').value.trim();
   if (!v) { $('#fNew').focus(); return; }
@@ -331,7 +359,6 @@ const esc = s => s.replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&g
 function preview() {
   const md = toMarkdown();
   $('#md').innerHTML = md.split('\n').map(l => l.startsWith('#') ? `<span class="hd">${esc(l)}</span>` : esc(l)).join('\n');
-  $('#title').textContent = `World: ${S.title.trim() || 'WORLD'}`;
   $('#sCount').innerHTML = `<b>${S.facts.length}</b>&nbsp;${S.facts.length === 1 ? 'fact' : 'facts'}`;
   $('#sWords').innerHTML = `<b>${S.facts.map(f => f.text).join(' ').match(/\S+/g)?.length || 0}</b>&nbsp;words`;
 }
