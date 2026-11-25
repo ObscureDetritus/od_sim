@@ -21,7 +21,7 @@ html, body { background: url(../../shared/bg-worldeater.jpg?v=3) center / cover 
 textarea.ui-field { height: auto; min-height: 22px; padding: 3px 6px; resize: none; line-height: 1.35; display: block; overflow: hidden; }
 .ui-field::placeholder { color: #4a4a4a; }
 #adder { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px; align-items: end; }
-#adder textarea { min-height: calc(3 * 1.35em + 8px); }   /* room for the three-line example */
+#adder textarea { min-height: 52px; }
 #adder .ui-btn { height: 26px; }
 #entries { display: flex; flex-direction: column; }
 .entry { display: grid; grid-template-columns: 14px 26px minmax(0, 1fr) 22px; gap: 4px; align-items: start; padding: 3px 0;
@@ -111,7 +111,7 @@ body.ro .entry textarea.ui-field:hover { border-color: transparent; }
         <div class="sec-body">
           <p class="note">Every fact gets written to the world.md file. You can change or delete entries from other people.</p>
           <div id="adder">
-            <textarea class="ui-field" id="fNew" rows="2" placeholder="The world is barren place.&#10;The red abbey was built 127 years ago.&#10;A tech overlord rules the land."
+            <textarea class="ui-field" id="fNew" rows="2" placeholder="The red abbey was built 127 years ago."
               title="Enter adds the entry · Shift+Enter for a new line"></textarea>
             <button class="ui-btn primary" id="bAdd" title="Add (Enter)"><svg class="i s"><use href="#i-plus"/></svg>Add</button>
           </div>
