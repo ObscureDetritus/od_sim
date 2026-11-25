@@ -35,6 +35,10 @@ textarea.ui-field { height: auto; min-height: 22px; padding: 3px 6px; resize: no
 .entry.dragging { opacity: .35; }
 .entry.over { box-shadow: inset 0 2px 0 var(--accent); }
 .entry.over.below { box-shadow: inset 0 -2px 0 var(--accent); }
+#keyNote { color: var(--text-dim); padding-top: 4px; }
+body.ro #adder, body.ro .entry .grip, body.ro .entry .x { visibility: hidden; }
+body.ro #adder { display: none; }
+body.ro .entry textarea.ui-field:hover { border-color: transparent; }
 @media (max-width: 760px) { #main { grid-template-columns: 1fr; grid-template-rows: 1fr 40%; } #form { border-right: 0; border-bottom: 1px solid var(--edge); } }
 </style>
 </head>
@@ -70,6 +74,14 @@ textarea.ui-field { height: auto; min-height: 22px; padding: 3px 6px; resize: no
 
   <div id="main">
     <div id="form">
+      <div class="section" id="secShared">
+        <div class="sec-head">Shared</div>
+        <div class="sec-body">
+          <div class="row"><label title="Passphrase for editing the shared world">Key</label>
+            <input class="ui-field" id="fKey" type="password" autocomplete="current-password" placeholder="Needed to edit"></div>
+          <div class="row"><label></label><div id="keyNote"></div></div>
+        </div>
+      </div>
       <div class="section">
         <div class="sec-head">World</div>
         <div class="sec-body">
@@ -96,18 +108,144 @@ textarea.ui-field { height: auto; min-height: 22px; padding: 3px 6px; resize: no
     <div class="cell"><i class="led"></i><span id="sCount"></span></div>
     <div class="cell">world.md</div>
     <div class="cell grow"></div>
+    <div class="cell"><i class="led" id="sLed"></i><span id="sMode"></span></div>
     <div class="cell" id="sWords"></div>
   </div>
 </div>
 
 <script>
-// ---------------------------------------------------------------- model
-const KEY = 'od.worldeater.v1';
+// ---------------------------------------------------------------- config
+// The shared world lives on the World Eater API (server/worldeater_api.py). ?api=URL overrides the address.
+const LOCAL_HOSTS = ['localhost', '127.0.0.1', ''];
+const API = (new URLSearchParams(location.search).get('api')
+  || (LOCAL_HOSTS.includes(location.hostname) ? 'http://127.0.0.1:8787' : 'https://api.declino.systems')).replace(/\/$/, '');
+const KEY = 'od.worldeater.v2', KEY_PASS = 'od.worldeater.key';
 const DEFAULT_INTRO = 'Collective knowledge: facts every agent already knows before arriving in the play.';
-const blank = () => ({ title: 'WORLD', intro: DEFAULT_INTRO, facts: [] });
+const POLL_MS = 4000, TYPE_MS = 500;
+
+// ---------------------------------------------------------------- model
+// S.facts = [{ id, text }]. The server is the truth; this copy is the last world it sent (also cached for offline use).
+const blank = () => ({ rev: 0, title: 'WORLD', intro: DEFAULT_INTRO, facts: [] });
+const rid = () => Math.random().toString(16).slice(2, 14);
 let S = blank();
-try { const saved = JSON.parse(localStorage.getItem(KEY)); if (saved && Array.isArray(saved.facts)) S = { ...blank(), ...saved }; } catch {}
+try {
+  const saved = JSON.parse(localStorage.getItem(KEY));
+  if (saved && Array.isArray(saved.facts)) S = { ...blank(), ...saved };
+  else {   // carry over a list from the old browser-only version
+    const old = JSON.parse(localStorage.getItem('od.worldeater.v1'));
+    if (old && Array.isArray(old.facts)) S = { ...blank(), title: old.title, intro: old.intro, facts: old.facts.map(t => ({ id: rid(), text: t })) };
+  }
+} catch {}
 const persist = () => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch {} };
+let pass = ''; try { pass = localStorage.getItem(KEY_PASS) || ''; } catch {}
+
+// mode: 'connecting' | 'shared' | 'local' (server unreachable: edits stay in this browser)
+let mode = 'connecting', locked = true, canEdit = false;
+
+// the same edits the server understands, applied here first so typing feels instant
+function applyOp(w, op) {
+  const at = id => w.facts.findIndex(f => f.id === id);
+  if (op.op === 'add') w.facts.push({ id: op.id || rid(), text: op.text.trim() });
+  if (op.op === 'edit' && at(op.id) >= 0) w.facts[at(op.id)].text = op.text;
+  if (op.op === 'remove' && at(op.id) >= 0) w.facts.splice(at(op.id), 1);
+  if (op.op === 'move' && at(op.id) >= 0) { const [f] = w.facts.splice(at(op.id), 1); w.facts.splice(Math.min(op.to, w.facts.length), 0, f); }
+  if (op.op === 'meta') { if ('title' in op) w.title = op.title; if ('intro' in op) w.intro = op.intro; }
+  if (op.op === 'replace') { w.title = op.title; w.intro = op.intro; w.facts = op.facts.map(t => ({ id: rid(), text: t })); }
+}
+
+// ---------------------------------------------------------------- server
+const queue = []; let sending = false;
+const headers = () => ({ 'Content-Type': 'application/json', ...(pass ? { 'X-World-Key': pass } : {}) });
+
+function send(op) {
+  applyOp(S, op); persist(); renderAll();
+  queue.push(op); flush();   // offline: stays queued until the server is back
+}
+async function flush() {
+  if (sending || !queue.length || mode !== 'shared') return;
+  sending = true;
+  const op = queue.shift();
+  try {
+    const r = await fetch(API + '/world/ops', { method: 'POST', headers: headers(), body: JSON.stringify(op) });
+    const body = await r.json().catch(() => ({}));
+    if (r.ok) { if (!queue.length) adopt(body); }
+    else if (r.status === 401) { queue.length = 0; canEdit = false; note('That key was refused, so your change was not saved.'); await pull(true); }
+    else if (body.world) { if (!queue.length) adopt(body.world); }   // e.g. someone removed that fact first
+  } catch { queue.unshift(op); setMode('local'); }
+  sending = false;
+  if (queue.length && mode === 'shared') flush();
+}
+async function pull(force) {
+  if (sending || queue.length || pending.size) return;
+  try {
+    const r = await fetch(`${API}/world${force ? '' : '?since=' + S.rev}`, { cache: 'no-store' });
+    if (r.status === 200) adopt(await r.json());
+    if (mode !== 'shared') setMode('shared');
+  } catch { setMode('local'); }
+}
+async function connect() {
+  try {
+    const h = await (await fetch(API + '/health', { cache: 'no-store' })).json();
+    locked = !!h.locked;
+    canEdit = !locked || (pass && (await fetch(API + '/auth', { headers: headers(), cache: 'no-store' })).ok);
+    setMode('shared');
+    if (queue.length) flush(); else await pull(true);
+  } catch { setMode('local'); }
+  keyNote();
+}
+
+// take the server's world, keeping whatever is still being typed here
+function adopt(w) {
+  const focus = document.activeElement, fid = focus?.closest?.('.entry')?.dataset.id;
+  const sel = focus && 'selectionStart' in focus ? [focus.selectionStart, focus.selectionEnd] : null;
+  S = w;
+  for (const [id, text] of pending) { const f = S.facts.find(x => x.id === id); if (f) f.text = text; }
+  if (metaPending) Object.assign(S, metaPending);
+  persist(); renderAll();
+  if (fid) { const ta = document.querySelector(`.entry[data-id="${fid}"] textarea`); if (ta) { ta.focus(); if (sel) ta.setSelectionRange(...sel); } }
+  else if (focus && focus.id && focus !== document.body) focus.focus();
+}
+
+// typing is batched: one edit per pause, not per key
+const pending = new Map(), timers = new Map(); let metaPending = null, metaTimer = 0;
+function typed(id, text) {
+  const f = S.facts.find(x => x.id === id); if (f) f.text = text;
+  pending.set(id, text); clearTimeout(timers.get(id));
+  timers.set(id, setTimeout(() => commitEdit(id), TYPE_MS)); preview();
+}
+function commitEdit(id) {
+  clearTimeout(timers.get(id)); if (!pending.has(id)) return;
+  const text = pending.get(id); pending.delete(id);
+  queue.push({ op: 'edit', id, text }); flush(); persist();
+}
+function typedMeta(part) {
+  Object.assign(S, part); metaPending = { ...metaPending, ...part }; clearTimeout(metaTimer);
+  metaTimer = setTimeout(() => { const m = metaPending; metaPending = null;
+    queue.push({ op: 'meta', ...m }); flush(); persist(); }, TYPE_MS);
+  preview();
+}
+
+function setMode(m) {
+  mode = m;
+  document.body.classList.toggle('ro', m === 'shared' && !canEdit);
+  sLed.classList.toggle('on', m === 'shared');
+  sMode.textContent = m === 'shared' ? (canEdit ? 'shared' : 'shared · read only') : m === 'local' ? 'offline · this browser only' : 'connecting…';
+  sMode.title = m === 'local' ? `Can't reach ${API}. Changes stay in this browser until it's back.` : API;
+  [bNew, bOpen].forEach(b => b.disabled = m === 'shared' && !canEdit);
+  document.querySelectorAll('#form textarea, #fTitle').forEach(t => t.readOnly = m === 'shared' && !canEdit);
+  keyNote();
+}
+function note(t) { keyNoteEl.textContent = t; }
+const keyNoteEl = document.getElementById('keyNote');
+function keyNote() {
+  secShared.style.display = mode === 'shared' && locked ? '' : 'none';
+  if (mode === 'shared' && locked) note(canEdit ? 'Key accepted. Your edits go to everyone.' : pass ? 'Wrong key. Read only.' : 'Read only. Enter the key to edit.');
+}
+fKey.value = pass;
+fKey.onchange = async () => {
+  pass = fKey.value.trim(); try { pass ? localStorage.setItem(KEY_PASS, pass) : localStorage.removeItem(KEY_PASS); } catch {}
+  await connect();
+};
 
 // ---------------------------------------------------------------- markdown
 function toMarkdown() {
@@ -115,7 +253,7 @@ function toMarkdown() {
   if (S.intro.trim()) L.push(S.intro.trim(), '');
   S.facts.forEach((f, i) => {
     const lead = `${i + 1}. `, pad = ' '.repeat(lead.length);       // continuation lines align under the text
-    L.push(lead + f.trim().replace(/\r/g, '').split('\n').join('\n' + pad));
+    L.push(lead + f.text.trim().replace(/\r/g, '').split('\n').join('\n' + pad));
   });
   return L.join('\n').replace(/\n+$/, '') + '\n';
 }
@@ -142,15 +280,16 @@ let dragFrom = -1;
 
 function renderEntries() {
   const box = $('#entries'); box.innerHTML = '';
-  S.facts.forEach((text, i) => {
-    const row = document.createElement('div'); row.className = 'entry'; row.dataset.i = i;
+  const ro = mode === 'shared' && !canEdit;
+  S.facts.forEach((fact, i) => {
+    const row = document.createElement('div'); row.className = 'entry'; row.dataset.i = i; row.dataset.id = fact.id;
     row.innerHTML = `<span class="grip" draggable="true" title="Drag to reorder"><svg class="i s"><use href="#i-grip"/></svg></span>
       <span class="n">${i + 1}.</span><textarea class="ui-field" rows="1"></textarea>
       <button class="x" title="Remove"><svg class="i s"><use href="#i-x"/></svg></button>`;
-    const ta = row.querySelector('textarea'); ta.value = text;
-    ta.oninput = () => { S.facts[i] = ta.value; autosize(ta); changed(); };
-    ta.onblur = () => { if (!ta.value.trim()) { S.facts.splice(i, 1); renderEntries(); changed(); } };   // emptied = removed
-    row.querySelector('.x').onclick = () => { S.facts.splice(i, 1); renderEntries(); changed(); };
+    const ta = row.querySelector('textarea'); ta.value = fact.text; ta.readOnly = ro;
+    ta.oninput = () => { typed(fact.id, ta.value); autosize(ta); };
+    ta.onblur = () => { if (ro) return; commitEdit(fact.id); if (!ta.value.trim()) send({ op: 'remove', id: fact.id }); };   // emptied = removed
+    row.querySelector('.x').onclick = () => { pending.delete(fact.id); send({ op: 'remove', id: fact.id }); };
     const grip = row.querySelector('.grip');
     grip.ondragstart = e => { dragFrom = i; row.classList.add('dragging'); e.dataTransfer.effectAllowed = 'move';
       e.dataTransfer.setData('text/plain', String(i)); e.dataTransfer.setDragImage(row, 10, 10); };
@@ -164,8 +303,8 @@ function renderEntries() {
     row.ondrop = e => {
       e.preventDefault(); if (dragFrom < 0) return;
       let to = i + (row.classList.contains('below') ? 1 : 0);
-      const [moved] = S.facts.splice(dragFrom, 1); if (dragFrom < to) to--;
-      S.facts.splice(to, 0, moved); dragFrom = -1; renderEntries(); changed();
+      const from = dragFrom; dragFrom = -1; if (from < to) to--;
+      if (from !== to) send({ op: 'move', id: S.facts[from].id, to }); else renderEntries();
     };
     box.appendChild(row);
     requestAnimationFrame(() => autosize(ta));
@@ -175,36 +314,45 @@ function renderEntries() {
 function addFact() {
   const v = $('#fNew').value.trim();
   if (!v) { $('#fNew').focus(); return; }
-  S.facts.push(v); $('#fNew').value = ''; autosize($('#fNew'));
-  renderEntries(); changed();
+  $('#fNew').value = ''; autosize($('#fNew'));
+  send({ op: 'add', text: v, id: rid() });
   $('#entries').lastElementChild?.scrollIntoView({ block: 'nearest' });
   $('#fNew').focus();
 }
 bAdd.onclick = addFact;
 fNew.onkeydown = e => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); addFact(); } };
 fNew.oninput = () => autosize(fNew);
-fTitle.oninput = () => { S.title = fTitle.value; changed(); };
-fIntro.oninput = () => { S.intro = fIntro.value; autosize(fIntro); changed(); };
+fTitle.oninput = () => typedMeta({ title: fTitle.value });
+fIntro.oninput = () => { typedMeta({ intro: fIntro.value }); autosize(fIntro); };
 
 // ---------------------------------------------------------------- preview, status
 const esc = s => s.replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]);
-function changed() {
+function preview() {
   const md = toMarkdown();
   $('#md').innerHTML = md.split('\n').map(l => l.startsWith('#') ? `<span class="hd">${esc(l)}</span>` : esc(l)).join('\n');
   $('#title').textContent = `World: ${S.title.trim() || 'WORLD'}`;
   $('#sCount').innerHTML = `<b>${S.facts.length}</b>&nbsp;${S.facts.length === 1 ? 'fact' : 'facts'}`;
-  $('#sWords').innerHTML = `<b>${S.facts.join(' ').match(/\S+/g)?.length || 0}</b>&nbsp;words`;
-  persist();
+  $('#sWords').innerHTML = `<b>${S.facts.map(f => f.text).join(' ').match(/\S+/g)?.length || 0}</b>&nbsp;words`;
 }
 function renderAll() {
-  fTitle.value = S.title; fIntro.value = S.intro; autosize(fIntro);
-  renderEntries(); changed();
+  if (document.activeElement !== fTitle) fTitle.value = S.title;
+  if (document.activeElement !== fIntro) { fIntro.value = S.intro; autosize(fIntro); }
+  renderEntries(); preview();
 }
 
 // ---------------------------------------------------------------- toolbar
-bNew.onclick = () => { if (!S.facts.length || confirm('Discard this world and start a new one?')) { S = blank(); renderAll(); } };
+const shareWarn = () => mode === 'shared' ? ' This replaces the shared world for everyone.' : '';
+bNew.onclick = () => {
+  if (S.facts.length && !confirm('Discard this world and start a new one?' + shareWarn())) return;
+  send({ op: 'replace', title: 'WORLD', intro: DEFAULT_INTRO, facts: [] });
+};
 bOpen.onclick = () => file.click();
-file.onchange = async () => { const f = file.files[0]; file.value = ''; if (!f) return; S = fromMarkdown(await f.text()); renderAll(); };
+file.onchange = async () => {
+  const f = file.files[0]; file.value = ''; if (!f) return;
+  const w = fromMarkdown(await f.text());
+  if (mode === 'shared' && !confirm(`Open ${f.name}?` + shareWarn())) return;
+  send({ op: 'replace', ...w });
+};
 bExport.onclick = e => { e.stopPropagation(); mExport.classList.toggle('open'); };
 document.addEventListener('click', () => mExport.classList.remove('open'));
 mExport.onclick = async e => {
@@ -218,6 +366,9 @@ mExport.onclick = async e => {
 };
 
 renderAll();
+setMode('connecting');
+connect();
+setInterval(() => { if (mode === 'shared') pull(); else connect(); }, POLL_MS);
 fNew.focus();
 </script>
 </body>

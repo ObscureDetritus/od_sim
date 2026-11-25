@@ -1,0 +1,30 @@
+# /etc/systemd/system/worldeater.service
+[Unit]
+Description=World Eater shared world API
+After=network.target
+
+[Service]
+User=worldeater
+WorkingDirectory=/opt/worldeater
+EnvironmentFile=/etc/worldeater.env
+ExecStart=/usr/bin/python3 /opt/worldeater/worldeater_api.py
+Restart=always
+# sandbox: it can only write its own data folder and can't see the rest of the system
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/worldeater/data
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6
+RestrictNamespaces=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+CapabilityBoundingSet=
+MemoryMax=256M
+
+[Install]
+WantedBy=multi-user.target

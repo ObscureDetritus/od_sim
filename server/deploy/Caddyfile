@@ -1,0 +1,4 @@
+# /etc/caddy/Caddyfile — Caddy fetches and renews the HTTPS certificate by itself.
+api.declino.systems {
+	reverse_proxy 127.0.0.1:8787
+}

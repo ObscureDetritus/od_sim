@@ -6,6 +6,12 @@
       "runtimeExecutable": "python3",
       "runtimeArgs": ["-m", "http.server", "8000", "--bind", "127.0.0.1"],
       "port": 8000
+    },
+    {
+      "name": "world-api",
+      "runtimeExecutable": "env",
+      "runtimeArgs": ["WORLD_KEY=test-key", "WORLD_DATA=server/data/world-dev.json", "python3", "server/worldeater_api.py"],
+      "port": 8787
     }
   ]
 }
