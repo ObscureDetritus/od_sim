@@ -9,8 +9,9 @@ Python standard library only. Run it behind an HTTPS proxy (Caddy) on the Contab
   GET  /health           -> {"ok", "rev", "locked", "public_add"}
   GET  /auth             -> 200 if header X-World-Key is right (or no key is set), else 401
   POST /world/ops        -> apply one edit, returns the new world.
-                            "add" is open to anyone (rate-limited per visitor) when WORLD_PUBLIC_ADD is on;
-                            every other op needs header X-World-Key if WORLD_KEY is set.
+                            With no WORLD_KEY anyone may make any edit. Without the key every edit is
+                            rate-limited per visitor and each text is capped at 1000 characters.
+                            With WORLD_KEY set, only "add" stays open (if WORLD_PUBLIC_ADD), the rest need the key.
        {"op": "add",     "text": "..."}
        {"op": "edit",    "id": "...", "text": "..."}
        {"op": "remove",  "id": "..."}
@@ -21,7 +22,11 @@ Python standard library only. Run it behind an HTTPS proxy (Caddy) on the Contab
 Environment:
   WORLD_KEY        passphrase for editing (unset = anyone can edit)
   WORLD_PUBLIC_ADD 1 (default) = anyone may add facts; 0 = adding needs the key too
-  WORLD_ADD_LIMIT  anonymous adds allowed per visitor: "per_minute,per_day" (default 6,60)
+  WORLD_ADD_LIMIT  adds allowed per visitor without the key: "per_minute,per_day" (default 6,60)
+  WORLD_EDIT_LIMIT other edits allowed per visitor without the key (default 90,1500)
+
+Safety: nothing a visitor sends is ever executed, evaluated, used in a file path or passed to a shell.
+Text is only stored as JSON strings and returned as JSON or plain markdown.
   WORLD_DATA       path of the JSON store (default ./data/world.json)
   WORLD_ORIGINS    comma-separated origins allowed by CORS
   WORLD_HOST/PORT  listen address (default 127.0.0.1:8787)
@@ -37,27 +42,37 @@ ORIGINS = {o.strip() for o in os.environ.get(
     'WORLD_ORIGINS', 'https://od.declino.systems,http://od.declino.systems,http://localhost:8000,http://127.0.0.1:8000').split(',') if o.strip()}
 HOST, PORT = os.environ.get('WORLD_HOST', '127.0.0.1'), int(os.environ.get('WORLD_PORT', '8787'))
 PUBLIC_ADD = os.environ.get('WORLD_PUBLIC_ADD', '1') != '0'
-PER_MIN, PER_DAY = (int(x) for x in os.environ.get('WORLD_ADD_LIMIT', '6,60').split(','))
+LIMITS = {'add': tuple(int(x) for x in os.environ.get('WORLD_ADD_LIMIT', '6,60').split(',')),
+          'edit': tuple(int(x) for x in os.environ.get('WORLD_EDIT_LIMIT', '90,1500').split(','))}
 MAX_PUBLIC_TEXT = 1000
 
-MAX_BODY, MAX_TEXT, MAX_FACTS = 256 * 1024, 4000, 2000
+MAX_BODY, MAX_TEXT, MAX_FACTS = 64 * 1024, 4000, 2000
 DEFAULT_INTRO = 'Collective knowledge: facts every agent already knows before arriving in the play.'
 lock = threading.Lock()
-recent = defaultdict(deque)   # visitor -> times of their anonymous adds in the last day
+recent = defaultdict(deque)   # (visitor, kind) -> times of their edits in the last day
+rate_lock = threading.Lock()
 
 
-def allow_add(who):
+def allow(who, kind):
+    per_min, per_day = LIMITS[kind]
     now = time.time()
-    q = recent[who]
-    while q and q[0] < now - 86400:
-        q.popleft()
-    if len(q) >= PER_DAY or sum(1 for t in q if t > now - 60) >= PER_MIN:
-        return False
-    q.append(now)
-    if len(recent) > 10000:   # forget idle visitors so memory stays small
-        for k in [k for k, v in recent.items() if not v or v[-1] < now - 86400]:
-            del recent[k]
+    with rate_lock:
+        q = recent[(who, kind)]
+        while q and q[0] < now - 86400:
+            q.popleft()
+        if len(q) >= per_day or sum(1 for t in q if t > now - 60) >= per_min:
+            return False
+        q.append(now)
+        if len(recent) > 20000:   # forget idle visitors so memory stays small
+            for k in [k for k, v in recent.items() if not v or v[-1] < now - 86400]:
+                del recent[k]
     return True
+
+
+def check_public_sizes(op):
+    texts = [op.get('text'), op.get('intro')] + (op['facts'] if isinstance(op.get('facts'), list) else [])
+    if any(isinstance(t, str) and len(t) > MAX_PUBLIC_TEXT for t in texts):
+        raise Bad(f'each text is limited to {MAX_PUBLIC_TEXT} characters')
 
 
 def load():
@@ -154,6 +169,7 @@ def apply(w, op):
 
 class Handler(BaseHTTPRequestHandler):
     server_version = 'WorldEater/1'
+    timeout = 15   # drop connections that stall
 
     def cors(self):
         origin = self.headers.get('Origin', '')
@@ -205,21 +221,24 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         if urlsplit(self.path).path != '/world/ops':
             return self.reply(404, {'error': 'not found'})
-        n = int(self.headers.get('Content-Length') or 0)
+        try:
+            n = int(self.headers.get('Content-Length') or 0)
+        except ValueError:
+            n = -1
         if n <= 0 or n > MAX_BODY:
             return self.reply(413, {'error': 'body too large or empty'})
         try:
             op = json.loads(self.rfile.read(n))
             if not isinstance(op, dict):
                 raise Bad('body must be an object')
-            keyed = not KEY or hmac.compare_digest(self.headers.get('X-World-Key', '').encode(), KEY.encode())
-            if not keyed:
-                if not (PUBLIC_ADD and op.get('op') == 'add'):
+            keyed = bool(KEY) and hmac.compare_digest(self.headers.get('X-World-Key', '').encode(), KEY.encode())
+            if not keyed:   # everyone without a key: open edits, but capped and rate-limited
+                kind = 'add' if op.get('op') == 'add' else 'edit'
+                if KEY and not (PUBLIC_ADD and kind == 'add'):
                     return self.reply(401, {'error': 'wrong or missing key'})
-                if isinstance(op.get('text'), str) and len(op['text']) > MAX_PUBLIC_TEXT:
-                    raise Bad(f'facts are limited to {MAX_PUBLIC_TEXT} characters')
-                if not allow_add(self.visitor()):
-                    return self.reply(429, {'error': 'too many facts at once, try again in a minute'})
+                check_public_sizes(op)
+                if not allow(self.visitor(), kind):
+                    return self.reply(429, {'error': 'Too many changes at once. Try again in a minute.'})
             with lock:
                 trial = json.loads(json.dumps(WORLD))
                 apply(trial, op)

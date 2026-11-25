@@ -106,7 +106,7 @@ body.ro .entry textarea.ui-field:hover { border-color: transparent; }
   <div id="status">
     <div class="cell"><i class="led"></i><span id="sCount"></span></div>
     <div class="cell">world.md</div>
-    <div class="cell grow"></div>
+    <div class="cell grow" id="sMsg"></div>
     <div class="cell"><i class="led" id="sLed"></i><span id="sMode"></span></div>
     <div class="cell" id="sWords"></div>
   </div>
@@ -169,8 +169,8 @@ async function flush() {
     const body = await r.json().catch(() => ({}));
     if (r.ok) { if (!queue.length) adopt(body); }
     else if (r.status === 401) { queue.length = 0; canEdit = false; note('That key was refused, so your change was not saved.'); await pull(true); }
-    else if (r.status === 429) { queue.length = 0; note(body.error || 'Too many facts at once. Try again in a minute.'); await pull(true); }
-    else if (body.world) { if (body.error && op.op === 'add') note(body.error); if (!queue.length) adopt(body.world); }   // e.g. someone removed that fact first
+    else if (r.status === 429) { queue.length = 0; flash(body.error || 'Too many changes at once. Try again in a minute.'); await pull(true); }
+    else if (body.world) { if (body.error && /limited/.test(body.error)) flash(body.error); if (!queue.length) adopt(body.world); }   // e.g. someone removed that fact first
   } catch { queue.unshift(op); setMode('local'); }
   sending = false;
   if (queue.length && mode === 'shared') flush();
@@ -234,11 +234,13 @@ function setMode(m) {
   [bNew, bOpen].forEach(b => b.disabled = m === 'shared' && !canEdit);
   [fTitle, fIntro].forEach(t => t.readOnly = m === 'shared' && !canEdit);
   fNew.readOnly = m === 'shared' && !canEdit && !publicAdd;
-  fNew.maxLength = m === 'shared' && !canEdit ? 1000 : 4000;
+  fNew.maxLength = m === 'shared' ? 1000 : 4000;   // the server caps visitors' text at 1000 characters
   adder.style.display = fNew.readOnly ? 'none' : '';
   keyNote();
 }
 function note(t) { keyNoteEl.textContent = t; }
+let flashTimer = 0;
+function flash(t) { sMsg.textContent = t; clearTimeout(flashTimer); flashTimer = setTimeout(() => sMsg.textContent = '', 6000); }
 const keyNoteEl = document.getElementById('keyNote');
 function keyNote() {
   secShared.style.display = mode === 'shared' && locked ? '' : 'none';
@@ -292,7 +294,7 @@ function renderEntries() {
     row.innerHTML = `<span class="grip" draggable="true" title="Drag to reorder"><svg class="i s"><use href="#i-grip"/></svg></span>
       <span class="n">${i + 1}.</span><textarea class="ui-field" rows="1"></textarea>
       <button class="x" title="Remove"><svg class="i s"><use href="#i-x"/></svg></button>`;
-    const ta = row.querySelector('textarea'); ta.value = fact.text; ta.readOnly = ro;
+    const ta = row.querySelector('textarea'); ta.value = fact.text; ta.readOnly = ro; ta.maxLength = 1000;
     ta.oninput = () => { typed(fact.id, ta.value); autosize(ta); };
     ta.onblur = () => { if (ro) return; commitEdit(fact.id); if (!ta.value.trim()) send({ op: 'remove', id: fact.id }); };   // emptied = removed
     row.querySelector('.x').onclick = () => { pending.delete(fact.id); send({ op: 'remove', id: fact.id }); };

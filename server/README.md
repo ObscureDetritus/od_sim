@@ -9,7 +9,7 @@ Python standard library only, one file: `worldeater_api.py`.
 
 ## Run locally
 
-Start the "world-api" preview (or `WORLD_KEY=test-key python3 server/worldeater_api.py`).
+Start the "world-api" preview (or `python3 server/worldeater_api.py`).
 World Eater on `localhost:8000` talks to `127.0.0.1:8787` automatically.
 
 ## Deploy on Contabo
@@ -22,9 +22,11 @@ scp -r server root@SERVER_IP:/root/worldeater
 ssh root@SERVER_IP "bash /root/worldeater/deploy/setup.sh"
 ```
 
-It installs Caddy (HTTPS) and a `worldeater` service, stores the world in
-`/opt/worldeater/data/world.json`, and generates the editing passphrase. Read it with
-`ssh root@SERVER_IP grep WORLD_KEY /etc/worldeater.env`. To change it, edit that file
-and run `systemctl restart worldeater`.
+It installs Caddy (HTTPS) and a `worldeater` service and stores the world in
+`/opt/worldeater/data/world.json`. To restore a backup:
+
+```bash
+ssh root@SERVER_IP "cp /var/backups/worldeater/world-YYYY-MM-DD_HH00.json /opt/worldeater/data/world.json && systemctl restart worldeater"
+```
 
 To update the code later: copy `worldeater_api.py` to `/opt/worldeater/` and restart the service.

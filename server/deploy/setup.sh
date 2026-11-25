@@ -9,8 +9,9 @@
 #   4. runs the API as its own locked-down user, listening only inside the server (127.0.0.1:8787)
 #   5. Caddy in front of it: the only public web server, with an automatic HTTPS certificate
 #
-# The editing passphrase is generated once and kept in /etc/worldeater.env (readable by root only).
-# Read it with: grep WORLD_KEY /etc/worldeater.env   ·   set WORLD_KEY='...' when running to choose your own.
+# Editing is open to everyone (rate-limited). To require a passphrase instead, put WORLD_KEY=... in
+# /etc/worldeater.env (readable by root only) and restart, or run this with WORLD_KEY='...' set.
+# Hourly backups of the world go to /var/backups/worldeater (kept 14 days).
 set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
 export DEBIAN_FRONTEND=noninteractive
@@ -59,9 +60,8 @@ ufw status | sed -n '1,12p'
 
 # ---------------------------------------------------------------- 4. the API
 say "4/5 World Eater API"
-if [ -z "${WORLD_KEY:-}" ]; then
+if [ -z "${WORLD_KEY+x}" ]; then   # not given: keep whatever the server already has (empty = open editing)
   WORLD_KEY="$(grep -s '^WORLD_KEY=' /etc/worldeater.env | cut -d= -f2- || true)"
-  [ -n "$WORLD_KEY" ] || WORLD_KEY="$(head -c 18 /dev/urandom | base64 | tr -d '/+=')"
 fi
 id worldeater >/dev/null 2>&1 || useradd --system --home /opt/worldeater --shell /usr/sbin/nologin worldeater
 install -d -o root -g root -m 755 /opt/worldeater
@@ -74,6 +74,7 @@ WORLD_ORIGINS=https://od.declino.systems,http://od.declino.systems
 ENV
 )
 install -m 644 "$here/worldeater.service" /etc/systemd/system/worldeater.service
+install -m 755 "$here/worldeater-backup" /etc/cron.hourly/worldeater-backup
 systemctl daemon-reload
 systemctl enable worldeater >/dev/null 2>&1
 systemctl restart worldeater
@@ -95,4 +96,4 @@ sleep 2
 say "check"
 curl -fsS http://127.0.0.1:8787/health && echo
 echo "Public address: https://api.declino.systems/health  (HTTPS works once the api DNS record points here)"
-echo "Editing passphrase: grep WORLD_KEY /etc/worldeater.env"
+echo "Editing: $( [ -n "$WORLD_KEY" ] && echo 'needs the passphrase in /etc/worldeater.env' || echo 'open to everyone, rate-limited')"

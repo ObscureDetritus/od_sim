@@ -1,4 +1,26 @@
 # /etc/caddy/Caddyfile — Caddy fetches and renews the HTTPS certificate by itself.
+{
+	servers {
+		timeouts {
+			read_header 10s
+			read_body 10s
+			write 30s
+			idle 2m
+		}
+	}
+}
+
 api.declino.systems {
+	# refuse oversized uploads before they reach the API
+	request_body {
+		max_size 64KB
+	}
+	header {
+		-Server
+		X-Content-Type-Options nosniff
+		Content-Security-Policy "default-src 'none'; frame-ancestors 'none'"
+		Referrer-Policy no-referrer
+		Strict-Transport-Security "max-age=31536000"
+	}
 	reverse_proxy 127.0.0.1:8787
 }

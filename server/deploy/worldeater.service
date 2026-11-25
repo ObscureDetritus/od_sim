@@ -24,7 +24,20 @@ RestrictNamespaces=true
 LockPersonality=true
 MemoryDenyWriteExecute=true
 CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictSUIDSGID=true
+RestrictRealtime=true
+ProtectClock=true
+ProtectHostname=true
+ProtectKernelLogs=true
+ProtectProc=invisible
+ProcSubset=pid
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources
+UMask=0077
 MemoryMax=256M
+TasksMax=64
 
 [Install]
 WantedBy=multi-user.target

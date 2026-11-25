@@ -1,0 +1,8 @@
+#!/bin/sh
+# /etc/cron.hourly/worldeater-backup — hourly copy of the shared world, kept 14 days.
+# Restore: cp /var/backups/worldeater/world-DATE.json /opt/worldeater/data/world.json && systemctl restart worldeater
+set -e
+d=/var/backups/worldeater
+install -d -m 700 "$d"
+[ -f /opt/worldeater/data/world.json ] && cp /opt/worldeater/data/world.json "$d/world-$(date +%Y-%m-%d_%H00).json"
+find "$d" -name 'world-*.json' -mtime +14 -delete

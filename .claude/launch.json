@@ -10,7 +10,7 @@
     {
       "name": "world-api",
       "runtimeExecutable": "env",
-      "runtimeArgs": ["WORLD_KEY=test-key", "WORLD_DATA=server/data/world-dev.json", "python3", "server/worldeater_api.py"],
+      "runtimeArgs": ["WORLD_KEY=", "WORLD_DATA=server/data/world-dev.json", "python3", "server/worldeater_api.py"],
       "port": 8787
     }
   ]
