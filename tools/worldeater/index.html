@@ -39,7 +39,7 @@ textarea.ui-field { height: auto; min-height: 22px; padding: 3px 6px; resize: no
 .entry.dragging { opacity: .35; }
 .entry.over { box-shadow: inset 0 2px 0 var(--accent); }
 .entry.over.below { box-shadow: inset 0 -2px 0 var(--accent); }
-#fIntro { background: transparent; border-color: transparent; padding-left: 0; color: var(--text); }   /* read-only */
+#fIntro { background: transparent; border: 0; padding-left: 0; color: var(--text); }   /* read-only, flush with the section edge */
 #keyNote { color: var(--text-dim); padding-top: 4px; }
 body.ro .entry .grip, body.ro .entry .x { visibility: hidden; }
 body.ro .entry textarea.ui-field:hover { border-color: transparent; }
@@ -102,7 +102,7 @@ body.ro .entry textarea.ui-field:hover { border-color: transparent; }
       </div>
       <div class="section">
         <div class="sec-body">
-          <div class="row"><label title="Tells the agents what this list is">Info</label><textarea class="ui-field" id="fIntro" rows="2" readonly tabindex="-1"></textarea></div>
+          <textarea class="ui-field" id="fIntro" rows="2" readonly tabindex="-1" title="Tells the agents what this list is"></textarea>
         </div>
       </div>
       <div class="section">
@@ -136,7 +136,7 @@ const LOCAL_HOSTS = ['localhost', '127.0.0.1', ''];
 const API = (new URLSearchParams(location.search).get('api')
   || (LOCAL_HOSTS.includes(location.hostname) ? 'http://127.0.0.1:8787' : 'https://api.declino.systems')).replace(/\/$/, '');
 const KEY = 'od.worldeater.v2', KEY_PASS = 'od.worldeater.key';
-const DEFAULT_INTRO = 'Collective knowledge: facts every agent already knows before arriving in the play.';
+const DEFAULT_INTRO = 'Facts every character knows about the world. A sort of collective knowledge. This is available to everyone equally when they spawn.';
 const POLL_MS = 4000, TYPE_MS = 500;
 
 // ---------------------------------------------------------------- model

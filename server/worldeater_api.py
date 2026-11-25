@@ -47,7 +47,7 @@ LIMITS = {'add': tuple(int(x) for x in os.environ.get('WORLD_ADD_LIMIT', '6,60')
 MAX_PUBLIC_TEXT = 1000
 
 MAX_BODY, MAX_TEXT, MAX_FACTS = 64 * 1024, 4000, 2000
-DEFAULT_INTRO = 'Collective knowledge: facts every agent already knows before arriving in the play.'
+DEFAULT_INTRO = 'Facts every character knows about the world. A sort of collective knowledge. This is available to everyone equally when they spawn.'
 lock = threading.Lock()
 recent = defaultdict(deque)   # (visitor, kind) -> times of their edits in the last day
 rate_lock = threading.Lock()
