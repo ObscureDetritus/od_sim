@@ -39,7 +39,7 @@ textarea.ui-field { height: auto; min-height: 22px; padding: 3px 6px; resize: no
 .entry.dragging { opacity: .35; }
 .entry.over { box-shadow: inset 0 2px 0 var(--accent); }
 .entry.over.below { box-shadow: inset 0 -2px 0 var(--accent); }
-#fTitle, #fIntro { background: transparent; border-color: transparent; padding-left: 0; color: var(--text); }   /* read-only */
+#fIntro { background: transparent; border-color: transparent; padding-left: 0; color: var(--text); }   /* read-only */
 #keyNote { color: var(--text-dim); padding-top: 4px; }
 body.ro .entry .grip, body.ro .entry .x { visibility: hidden; }
 body.ro .entry textarea.ui-field:hover { border-color: transparent; }
@@ -87,9 +87,7 @@ body.ro .entry textarea.ui-field:hover { border-color: transparent; }
         </div>
       </div>
       <div class="section">
-        <div class="sec-head">World</div>
         <div class="sec-body">
-          <div class="row"><label title="The file's heading">Heading</label><input class="ui-field" id="fTitle" readonly tabindex="-1"></div>
           <div class="row"><label title="Tells the agents what this list is">Intro</label><textarea class="ui-field" id="fIntro" rows="2" readonly tabindex="-1"></textarea></div>
         </div>
       </div>
@@ -338,7 +336,7 @@ function preview() {
   $('#sWords').innerHTML = `<b>${S.facts.map(f => f.text).join(' ').match(/\S+/g)?.length || 0}</b>&nbsp;words`;
 }
 function renderAll() {
-  fTitle.value = S.title; fIntro.value = S.intro; autosize(fIntro);   // read-only: set on the server
+  fIntro.value = S.intro; autosize(fIntro);   // read-only: set on the server
   renderEntries(); preview();
 }
 
