@@ -83,6 +83,9 @@ body.ro .entry textarea.ui-field:hover { border-color: transparent; }
     </div>
     <div class="title" id="title">World Eater</div>
     <div class="r">
+      <button class="ui-btn" id="bSaveSess" title="Save world facts into the active Session for Play">Save Session</button>
+      <a class="ui-btn" href="../play/index.html" style="text-decoration:none">Play →</a>
+      <div class="vsep"></div>
       <button class="ui-btn primary" id="bExport"><svg class="i"><use href="#i-down"/></svg>Export</button>
       <div class="menu" id="mExport">
         <button data-x="copy">Copy markdown</button>
@@ -131,6 +134,7 @@ body.ro .entry textarea.ui-field:hover { border-color: transparent; }
   </div>
 </div>
 
+<script src="../../shared/session.js"></script>
 <script>
 // ---------------------------------------------------------------- config
 // The shared world lives on the World Eater API (server/worldeater_api.py). ?api=URL overrides the address.
@@ -154,7 +158,7 @@ try {
     if (old && Array.isArray(old.facts)) S = { ...blank(), title: old.title, intro: old.intro, facts: old.facts.map(t => ({ id: rid(), text: t })) };
   }
 } catch {}
-const persist = () => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch {} };
+const persist = () => { try { localStorage.setItem(KEY, JSON.stringify(S)); if (window.ODSession) ODSession.saveWorldToSession(S); } catch {} };
 let pass = ''; try { pass = localStorage.getItem(KEY_PASS) || ''; } catch {}
 
 // mode: 'connecting' | 'shared' | 'local' (server unreachable: edits stay in this browser)
@@ -381,6 +385,10 @@ file.onchange = async () => {
   const w = fromMarkdown(await f.text());
   if (mode === 'shared' && !confirm(`Open ${f.name}?` + shareWarn())) return;
   send({ op: 'replace', facts: w.facts });   // the file's heading and intro are ignored
+};
+bSaveSess.onclick = () => {
+  if (window.ODSession) ODSession.saveWorldToSession(S);
+  flash(`Saved ${S.facts.length} world fact(s) to Session`);
 };
 bExport.onclick = e => { e.stopPropagation(); mExport.classList.toggle('open'); };
 document.addEventListener('click', () => mExport.classList.remove('open'));

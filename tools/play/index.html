@@ -3,8 +3,1389 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Play</title>
-<style>html, body { margin: 0; height: 100%; background: #000; color-scheme: dark; }</style>
+<title>Play — Obscure Detritus Simulation</title>
+<link rel="stylesheet" href="../../shared/ui.css?v=2">
+<style>
+#main { grid-template-columns: minmax(0, 1fr) 360px; }
+#work { display: grid; grid-template-rows: minmax(260px, 55%) 1fr; min-height: 0; overflow: hidden; }
+#viewport { position: relative; border-bottom: 1px solid var(--edge); background: #090909; overflow: hidden; min-height: 220px; }
+#cv { position: relative; z-index: 2; display: block; width: 100%; height: 100%; cursor: grab; background: transparent; }
+#cv:active { cursor: grabbing; }
+#tower-anchor { position: absolute; pointer-events: none; z-index: 3; transform: translate(-50%, -72%); transition: opacity .15s; }
+#tower-anchor img { display: block; width: 64px; height: auto; filter: grayscale(15%) contrast(105%); }
+.cam-bar { position: absolute; bottom: 8px; left: 8px; display: flex; gap: 4px; z-index: 4; }
+.cam-bar .ui-btn { font-size: 10.5px; height: 20px; padding: 0 7px; background: rgba(12,12,12,.92); }
+.hud-top { position: absolute; top: 8px; left: 8px; right: 8px; display: flex; gap: 6px; flex-wrap: wrap; pointer-events: none; z-index: 4; }
+.hud-pill { padding: 2px 7px; background: rgba(8,8,8,.9); border: 1px solid var(--edge); color: var(--text-dim); font-size: 11px; }
+.hud-pill b { color: var(--value); }
+.hud-pill.warn b { color: #e6e6e6; }
+
+#ledgerWrap { display: grid; grid-template-rows: auto 1fr; min-height: 0; overflow: hidden; }
+#ctrlBar { padding: 6px 10px; border-bottom: 1px solid var(--edge); display: flex; flex-wrap: wrap; gap: 6px; align-items: center; background: var(--rack); }
+#feed { overflow-y: auto; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; user-select: text; }
+
+.tick-hdr { background: #141414; border: 1px solid var(--edge); border-left: 2px solid var(--accent); padding: 3px 8px; color: var(--value); font-weight: 600; font-size: 11px; }
+.narr-box { background: #0c0c0c; border: 1px dashed var(--well-border); padding: 6px 8px; color: var(--text); font-size: 11.5px; }
+.narr-epi { background: #101010; border: 1px solid #2b2b2b; border-left: 2px solid #9a9a9a; padding: 6px 8px; color: #c4c4c4; font-size: 11.5px; font-style: italic; }
+.turn { border-bottom: 1px solid #161616; padding-bottom: 6px; }
+.turn-hdr { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 2px; font-size: 11.5px; }
+.turn-id { color: var(--value); font-weight: 700; }
+.turn-tag { border: 1px solid var(--well-border); padding: 0 4px; font-size: 10px; color: var(--text-dim); }
+.turn-meter { color: #b8b8b8; font-size: 10.5px; }
+.turn-thought { color: var(--text-dim); font-size: 11px; white-space: pre-wrap; margin-bottom: 2px; }
+.turn-action { color: #cfcfcf; font-style: italic; font-size: 11.5px; margin-bottom: 2px; }
+.turn-speech { color: #ffffff; background: #141414; border-left: 2px solid var(--accent); padding: 3px 7px; display: inline-block; margin-top: 2px; }
+.turn-item { color: #d4d4d4; font-size: 10.5px; margin-top: 2px; }
+
+.tbl { width: 100%; border-collapse: collapse; font-size: 11px; }
+.tbl th, .tbl td { border: 1px solid var(--edge); padding: 4px 5px; text-align: left; }
+.tbl th { background: var(--rack-head); color: var(--text-dim); font-weight: 600; }
+.tbl tr.row-click { cursor: pointer; }
+.tbl tr.row-click:hover { background: var(--well-hover); }
+.tbl tr.ghost { opacity: .42; font-style: italic; }
+
+.dossier-row { margin-bottom: 5px; font-size: 11px; line-height: 1.4; }
+.dossier-lbl { color: var(--text-dim); text-transform: uppercase; font-size: 10px; }
+.cues { display: flex; flex-wrap: wrap; gap: 4px; }
+.cues .ui-btn { font-size: 10.5px; height: 21px; padding: 0 7px; }
+.led.live { background: #55ff55; }
+.led.warn { background: #ffff55; }
+.led.err { background: #ff5555; }
+
+dialog { background: #0a0a0a; color: var(--text); border: 1px solid var(--well-border); border-radius: 2px;
+  padding: 14px 16px; width: min(440px, calc(100vw - 24px)); box-shadow: 0 12px 36px rgba(0,0,0,.8); }
+dialog::backdrop { background: rgba(0,0,0,.72); }
+dialog h2 { margin: 0 0 10px; font-size: 13px; color: var(--value); font-weight: 600; }
+dialog .row { grid-template-columns: 108px 1fr; margin-bottom: 8px; }
+dialog .btns { display: flex; justify-content: flex-end; gap: 6px; margin-top: 12px; }
+.note-sm { font-size: 10.5px; color: var(--text-dim); line-height: 1.4; margin-bottom: 8px; }
+
+@media (max-width: 900px) {
+  #main { grid-template-columns: 1fr; grid-template-rows: 1fr 280px; }
+  #side { border-left: 0; border-top: 1px solid var(--edge); }
+}
+</style>
 </head>
-<body></body>
+<body>
+<svg width="0" height="0" style="position:absolute">
+  <symbol id="i-home" viewBox="0 0 16 16"><rect x="2" y="2" width="5" height="5"/><rect x="9" y="2" width="5" height="5"/><rect x="2" y="9" width="5" height="5"/><rect x="9" y="9" width="5" height="5"/></symbol>
+  <symbol id="i-open" viewBox="0 0 16 16"><path d="M1.5 4.5v8.5h13V6H7.5L6 4.5z M1.5 4.5V3h4l1 1.5"/></symbol>
+  <symbol id="i-down" viewBox="0 0 16 16"><path d="M8 2v8 M4.5 7L8 10.5 11.5 7 M2.5 13.5h11"/></symbol>
+  <symbol id="i-key" viewBox="0 0 16 16"><circle cx="5.5" cy="8" r="3"/><path d="M8.5 8h6 M12 8v2.5 M14 8v2"/></symbol>
+  <symbol id="i-chev" viewBox="0 0 12 12"><path d="M4.5 3L7.5 6 4.5 9"/></symbol>
+</svg>
+
+<datalist id="dl-models">
+  <option value="deepseek/deepseek-chat">DeepSeek V3 (cheap & fast)</option>
+  <option value="mistralai/mistral-small-3.2-24b-instruct">Mistral Small 3.2 24B</option>
+  <option value="qwen/qwen3-30b-a3b">Qwen3 30B-A3B</option>
+  <option value="google/gemma-4-26b">Gemma 4 26B</option>
+  <option value="openai/gpt-4o-mini">GPT-4o mini</option>
+  <option value="anthropic/claude-3.5-haiku">Claude 3.5 Haiku</option>
+</datalist>
+
+<!-- API CONFIGURATION DIALOG (Key stays strictly in local browser storage) -->
+<dialog id="dApi">
+  <form method="dialog" id="apiForm">
+    <h2>LLM API Configuration (Browser-Local Only)</h2>
+    <p class="note-sm">
+      No API key is stored in this repository or exported with sessions. Your key stays strictly in this browser's localStorage and calls OpenRouter (or your local Ollama/llama.cpp server) directly.
+    </p>
+    <div class="row">
+      <label>Dry-Run (Mock)</label>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <button type="button" class="switch" id="swDryRun"></button>
+        <span style="font-size:11px;color:var(--text-dim)">$0.00 offline simulation for testing</span>
+      </div>
+    </div>
+    <div class="row">
+      <label>OpenRouter Key</label>
+      <input class="ui-field" id="fApiKey" type="password" autocomplete="off" placeholder="sk-or-v1-... (required for live OpenRouter)">
+    </div>
+    <div class="row">
+      <label>API Endpoint</label>
+      <input class="ui-field" id="fBaseUrl" placeholder="https://openrouter.ai/api/v1/chat/completions">
+    </div>
+    <div class="row">
+      <label>Model</label>
+      <input class="ui-field" id="fModel" list="dl-models" placeholder="deepseek/deepseek-chat">
+    </div>
+    <div class="row">
+      <label>Budget Cap ($)</label>
+      <input class="ui-field num" id="fBudget" type="number" step="0.10" min="0.05">
+    </div>
+    <p class="note-sm" style="margin-top:6px;">
+      Tip: For local Ollama/llama.cpp, set Endpoint to <code>http://localhost:11434/v1/chat/completions</code> and leave API Key blank.
+    </p>
+    <div class="btns">
+      <button type="button" class="ui-btn" id="bClearKey">Clear Key</button>
+      <button type="submit" class="ui-btn" value="cancel">Cancel</button>
+      <button type="button" class="ui-btn primary" id="bSaveApi">Save API Config</button>
+    </div>
+  </form>
+</dialog>
+
+<div id="app">
+  <div id="toolbar">
+    <div class="l">
+      <a class="tool" href="../../index.html" title="All tools"><svg class="i"><use href="#i-home"/></svg></a>
+      <div class="vsep"></div>
+      <a class="ui-btn" href="../mapgen/index.html" style="text-decoration:none">MapGen</a>
+      <a class="ui-btn" href="../soulmoulder/index.html" style="text-decoration:none">Souls</a>
+      <a class="ui-btn" href="../worldeater/index.html" style="text-decoration:none">World</a>
+      <a class="ui-btn" href="../tutorial/index.html" style="text-decoration:none">Tutorial</a>
+    </div>
+    <div style="color:var(--value);font-weight:600;" id="hdrSession">Play</div>
+    <div class="r">
+      <button class="ui-btn" id="bApi" title="Configure OpenRouter or Local LLM API key"><i class="led" id="apiLed"></i><svg class="i s"><use href="#i-key"/></svg><span id="apiLbl">API</span></button>
+      <div class="vsep"></div>
+      <button class="ui-btn" id="bLoadFile" title="Load .odsession.json, map .json, or soul .md"><svg class="i s"><use href="#i-open"/></svg>Load</button>
+      <div class="menu" id="mLoad">
+        <button data-l="session">Load .odsession.json</button>
+        <button data-l="map">Load Map (.json / .txt)</button>
+        <button data-l="souls">Add Souls (.md)</button>
+        <button data-l="world">Load World (.md)</button>
+        <hr>
+        <button data-l="reload">Reload from Browser Session</button>
+        <button data-l="starter">Load Starter Chamber</button>
+      </div>
+      <button class="ui-btn primary" id="bExport"><svg class="i s"><use href="#i-down"/></svg>Save</button>
+      <div class="menu" id="mExport">
+        <button data-x="session-save">Save to Browser Session</button>
+        <button data-x="session-dl">Download .odsession.json</button>
+        <hr>
+        <button data-x="log-md">Download Transcript (.md)</button>
+        <button data-x="log-json">Download Transcript (.json)</button>
+      </div>
+      <input type="file" id="fSess" accept=".json,.odsession.json" hidden>
+      <input type="file" id="fMap" accept=".json,.txt" hidden>
+      <input type="file" id="fSouls" accept=".md,.markdown,.txt" multiple hidden>
+      <input type="file" id="fWorld" accept=".md,.markdown,.txt" hidden>
+    </div>
+  </div>
+
+  <div id="main">
+    <div id="work">
+      <div id="viewport">
+        <div class="hud-top">
+          <span class="hud-pill">CYCLE <b id="lblCycle">14</b></span>
+          <span class="hud-pill warn">ESCHATON <b id="lblCountdown">T-100</b></span>
+          <span class="hud-pill">TICK <b id="lblTick">0</b></span>
+          <span class="hud-pill">ACT <b id="lblAct">Act I: The Calibration</b></span>
+          <span class="hud-pill" id="hudBusy" style="display:none;border-color:#cfcfcf;color:#ffffff;">COMPUTING TICK…</span>
+        </div>
+        <div id="tower-anchor"><img src="../../shared/tower.gif" alt="Tower"></div>
+        <canvas id="cv"></canvas>
+        <div class="cam-bar">
+          <button class="ui-btn" onclick="setCam('iso')">3D ISO</button>
+          <button class="ui-btn" onclick="setCam('top')">TOP-DOWN</button>
+          <button class="ui-btn" onclick="setCam('low')">LOW POV</button>
+          <button class="ui-btn" onclick="setCam('iso')">RESET</button>
+          <button class="ui-btn" id="bTower" onclick="toggleTower()">TOWER: ON</button>
+        </div>
+      </div>
+
+      <div id="ledgerWrap">
+        <div id="ctrlBar">
+          <button class="ui-btn primary" id="bTick" title="Advance 1 tick (Space)">Step 1 Tick</button>
+          <button class="ui-btn" id="bAuto" title="Toggle continuous simulation">Auto: Off</button>
+          <button class="ui-btn" id="bReset" title="Reset simulation to Tick 0">Reset</button>
+          <input class="ui-field" id="inpEvent" style="flex:1;min-width:160px;" placeholder="Inject event, anomaly, or directive (Enter)...">
+          <button class="ui-btn" id="bInject">Inject</button>
+        </div>
+        <div id="feed"></div>
+      </div>
+    </div>
+
+    <div id="side">
+      <div class="section collapsible open">
+        <div class="sec-head fold"><svg class="i s chev"><use href="#i-chev"/></svg>Inspector</div>
+        <div class="sec-body" id="inspector">
+          <div style="color:var(--text-dim);font-size:11px;">Click any agent, object, or tile in the 3D viewport to inspect status, thoughts, inventory, and grid properties.</div>
+        </div>
+      </div>
+
+      <div class="section collapsible open">
+        <div class="sec-head fold"><svg class="i s chev"><use href="#i-chev"/></svg>Entities <span id="entCount" style="margin-left:auto;color:var(--text-dim);font-weight:400;font-size:11px;">0</span></div>
+        <div class="sec-body">
+          <table class="tbl" id="tblAgents">
+            <thead><tr><th>Entity</th><th>Status</th><th>Pos</th><th>State</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="section collapsible open">
+        <div class="sec-head fold"><svg class="i s chev"><use href="#i-chev"/></svg>Map Objects <span id="objCount" style="margin-left:auto;color:var(--text-dim);font-weight:400;font-size:11px;">0</span></div>
+        <div class="sec-body">
+          <table class="tbl" id="tblObjs">
+            <thead><tr><th>Object</th><th>Grid</th><th>Flags</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="section collapsible open">
+        <div class="sec-head fold"><svg class="i s chev"><use href="#i-chev"/></svg>Event Cues</div>
+        <div class="sec-body">
+          <div class="cues" id="cueBar"></div>
+        </div>
+      </div>
+
+      <div class="section collapsible">
+        <div class="sec-head fold"><svg class="i s chev"><use href="#i-chev"/></svg>World Facts <span id="worldCount" style="margin-left:auto;color:var(--text-dim);font-weight:400;font-size:11px;">0</span></div>
+        <div class="sec-body" id="worldList" style="font-size:11px;color:var(--text-dim);gap:4px;"></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="status">
+    <div class="cell"><i class="led" id="sLed"></i><span id="sMode">DRY-RUN</span></div>
+    <div class="cell" id="sModel">deepseek/deepseek-chat</div>
+    <div class="cell" id="sSpent">$0.00000</div>
+    <div class="cell grow" id="sMsg" style="color:var(--value)"></div>
+    <div class="cell" id="sMapInfo"></div>
+  </div>
+</div>
+
+<script src="../../shared/session.js"></script>
+<script>
+// ============================================================================
+// STATE & SESSION BOOTSTRAP
+// ============================================================================
+const PRICING = {
+  'deepseek/deepseek-chat': [0.14, 0.28],
+  'mistralai/mistral-small-3.2-24b-instruct': [0.06, 0.18],
+  'qwen/qwen3-30b-a3b': [0.08, 0.24],
+  'google/gemma-4-26b': [0.10, 0.25],
+  'openai/gpt-4o-mini': [0.15, 0.60],
+  'anthropic/claude-3.5-haiku': [1.00, 5.00]
+};
+
+let apiCfg = ODSession.loadApiConfig();
+let sess = ODSession.load();
+let mapData = ODSession.getEffectiveMap(sess);
+let worldData = ODSession.getEffectiveWorld(sess);
+
+let sim = null;
+let selected = null; // { type: 'agent'|'object', id }
+let isBusy = false;
+let autoTimer = null;
+
+let flashTimer = 0;
+function flash(msg) { sMsg.textContent = msg; clearTimeout(flashTimer); flashTimer = setTimeout(() => sMsg.textContent = '', 4000); }
+
+function isLocalUrl(url) {
+  return /^https?:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0|192\.168\.|10\.)/i.test(url || '');
+}
+
+// ============================================================================
+// TF-IDF EPISODIC MEMORY (Browser JS)
+// ============================================================================
+function tokenize(text) {
+  return (String(text || '').toLowerCase().match(/\b[a-z0-9]{3,}\b/g) || []);
+}
+function tfMap(words) {
+  const m = {};
+  words.forEach(w => { m[w] = (m[w] || 0) + 1; });
+  const len = words.length || 1;
+  Object.keys(m).forEach(k => m[k] /= len);
+  return m;
+}
+function cosineSim(a, b) {
+  let dot = 0, ma = 0, mb = 0;
+  for (const k in a) { ma += a[k] * a[k]; if (b[k]) dot += a[k] * b[k]; }
+  for (const k in b) mb += b[k] * b[k];
+  return (ma && mb) ? dot / (Math.sqrt(ma) * Math.sqrt(mb)) : 0;
+}
+function retrieveMemories(memList, query, topK = 2) {
+  if (!memList || !memList.length) return [];
+  const qv = tfMap(tokenize(query));
+  return memList
+    .map(m => ({ m, s: cosineSim(qv, tfMap(tokenize(m.text))) }))
+    .sort((a, b) => b.s - a.s)
+    .slice(0, topK)
+    .map(x => x.m);
+}
+
+// ============================================================================
+// SIMULATION ENGINE (MapGen Grid + Abstract Objects + Souls + World + Director)
+// ============================================================================
+function isTileWalkable(x, y, objects) {
+  if (!mapData || x < 0 || y < 0 || x >= mapData.w || y >= mapData.h) return false;
+  const v = mapData.cells[y * mapData.w + x];
+  if (v !== 2 && v !== 3 && v !== 4 && v !== 5) return false;
+  const o = (objects || []).find(ob => !ob.carriedBy && ob.x === x && ob.y === y);
+  if (o && !o.walkable) return false;
+  return true;
+}
+
+function getWalkableCells(objects) {
+  const out = [];
+  if (!mapData) return out;
+  for (let y = 0; y < mapData.h; y++) {
+    for (let x = 0; x < mapData.w; x++) {
+      if (isTileWalkable(x, y, objects)) out.push({ x, y });
+    }
+  }
+  return out;
+}
+
+function initSim() {
+  sess = ODSession.load();
+  mapData = ODSession.getEffectiveMap(sess);
+  worldData = ODSession.getEffectiveWorld(sess);
+  const d = sess.director || ODSession.defaultDirector();
+  const objects = (mapData.objects || []).map(o => ({ ...o, carriedBy: null }));
+  const walkables = getWalkableCells(objects);
+
+  const activeSouls = Object.values(sess.souls || {}).filter(s => s.enabled !== false && s.id !== 'NARRATOR');
+  const agents = {};
+  activeSouls.forEach((entry, idx) => {
+    const data = entry.data || ODSession.parseSoulMarkdown(entry.markdown, entry.id);
+    let sp = entry.spawn && isTileWalkable(entry.spawn.x, entry.spawn.y, objects) ? { ...entry.spawn } : null;
+    if (!sp && walkables.length) {
+      const wi = Math.floor((idx + 0.5) * walkables.length / Math.max(1, activeSouls.length));
+      sp = { ...walkables[Math.min(walkables.length - 1, wi)] };
+    }
+    if (!sp) sp = { x: Math.floor(mapData.w / 2), y: Math.floor(mapData.h / 2) };
+    const mems = (data.memories || []).map((m, i) => ({ id: 'm' + i, tick: 0, text: m.text, kind: m.kind }));
+    agents[entry.id] = {
+      id: entry.id,
+      color: data.color || ODSession.colorForId(entry.id),
+      data,
+      status: data.status || 5,
+      x: sp.x, y: sp.y, elev: 0,
+      renderPos: { x: sp.x, y: 0, z: sp.y },
+      inventory: [],
+      memories: mems,
+      lastThought: ''
+    };
+  });
+
+  const narratorEntry = sess.souls?.NARRATOR && sess.souls.NARRATOR.enabled !== false ? sess.souls.NARRATOR : null;
+  const narratorSoul = narratorEntry ? (narratorEntry.data || ODSession.parseSoulMarkdown(narratorEntry.markdown, 'NARRATOR')) : null;
+
+  sim = {
+    tick: 0,
+    cycle: d.cycleNumber ?? 14,
+    ticksToEschaton: d.eschatonTicks ?? 100,
+    actIdx: 0,
+    act: (d.acts && d.acts[0]) || 'Act I: The Calibration',
+    narratorSoul,
+    objects,
+    agents,
+    manifested: Object.keys(agents),
+    turnCursor: 0,
+    recentEvents: [],
+    workingMemory: [],
+    history: [],
+    promptTokens: 0,
+    completionTokens: 0,
+    totalCostUsd: 0
+  };
+
+  selected = null;
+  renderAllUI();
+  renderInitialFeed();
+}
+
+function renderInitialFeed() {
+  feed.innerHTML = '';
+  const ids = Object.keys(sim.agents);
+  if (!ids.length) {
+    feed.innerHTML = `
+      <div class="narr-box">
+        <strong>No souls loaded in this session yet.</strong><br>
+        Create souls in <a href="../soulmoulder/index.html" style="color:#55ff55">Soul Moulder</a>, import <code>.md</code> soul files via <b>Load</b>, or click below to load the built-in Starter Chamber.<br><br>
+        <button class="ui-btn primary" onclick="loadStarterNow()">Load Starter Chamber (Map + 4 Souls + World)</button>
+      </div>`;
+  } else {
+    feed.innerHTML = `<div style="color:var(--text-dim);font-style:italic;">Session ready (${ids.length} entities, ${sim.objects.length} map objects, ${(worldData.facts || []).length} world facts). Press <b>Step 1 Tick</b> or Spacebar.</div>`;
+  }
+}
+
+function loadStarterNow() {
+  ODSession.loadStarterSession();
+  initSim();
+  flash('Loaded Starter Chamber');
+}
+
+// ============================================================================
+// LLM CLIENT (Direct OpenRouter / Local OpenAI-Compatible / Dry-Run Mock)
+// ============================================================================
+function calcCost(model, pTok, cTok) {
+  if (isLocalUrl(apiCfg.baseUrl)) return 0;
+  const [inP, outP] = PRICING[model] || [0.14, 0.28];
+  return ((pTok / 1e6) * inP + (cTok / 1e6) * outP) * 1.055;
+}
+
+async function callLLM(systemPrompt, userPrompt, mockFn, temperature = 0.7) {
+  if (!apiCfg.dryRun && sim.totalCostUsd >= apiCfg.maxBudgetUsd && !isLocalUrl(apiCfg.baseUrl)) {
+    throw new Error(`Budget cap ($${apiCfg.maxBudgetUsd.toFixed(2)}) reached. Increase cap in API settings or switch to Dry-Run.`);
+  }
+  if (apiCfg.dryRun) {
+    await new Promise(r => setTimeout(r, 90));
+    const content = JSON.stringify(mockFn());
+    return { content, pTok: 0, cTok: 0, cost: 0 };
+  }
+  const local = isLocalUrl(apiCfg.baseUrl);
+  if (!local && !apiCfg.apiKey.trim()) {
+    openApiDialog();
+    throw new Error('Enter your OpenRouter API key (or enable Dry-Run) to run the simulation.');
+  }
+
+  const headers = { 'Content-Type': 'application/json' };
+  if (apiCfg.apiKey.trim()) headers['Authorization'] = `Bearer ${apiCfg.apiKey.trim()}`;
+  if (!local) {
+    headers['HTTP-Referer'] = location.origin;
+    headers['X-Title'] = 'Obscure Detritus Toolkit';
+  }
+
+  const body = {
+    model: apiCfg.model,
+    messages: [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: userPrompt }
+    ],
+    temperature,
+    max_tokens: 420,
+    response_format: { type: 'json_object' }
+  };
+
+  const res = await fetch(apiCfg.baseUrl, { method: 'POST', headers, body: JSON.stringify(body) });
+  if (!res.ok) {
+    const errTxt = await res.text().catch(() => res.statusText);
+    throw new Error(`API ${res.status}: ${errTxt.slice(0, 180)}`);
+  }
+  const data = await res.json();
+  const content = data?.choices?.[0]?.message?.content || '{}';
+  const pTok = data?.usage?.prompt_tokens || 600;
+  const cTok = data?.usage?.completion_tokens || 140;
+  const cost = calcCost(apiCfg.model, pTok, cTok);
+  sim.promptTokens += pTok;
+  sim.completionTokens += cTok;
+  sim.totalCostUsd += cost;
+  return { content, pTok, cTok, cost };
+}
+
+function safeParseJSON(raw, fallback) {
+  try {
+    const cleaned = String(raw || '').trim()
+      .replace(/^```(?:json)?\s*/i, '')
+      .replace(/\s*```$/, '')
+      .replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+    return JSON.parse(cleaned);
+  } catch {
+    return fallback;
+  }
+}
+
+// ============================================================================
+// SPATIAL NAVIGATION & ABSTRACT OBJECT INTERACTION
+// ============================================================================
+function moveAgentStep(agent, targetText, actionText) {
+  const tgt = String(targetText || '').toLowerCase();
+  const act = String(actionText || '').toLowerCase();
+  let goal = null;
+
+  // 1. Move toward another agent if targeted
+  for (const other of Object.values(sim.agents)) {
+    if (other.id !== agent.id && (tgt.includes(other.id.toLowerCase()) || act.includes(other.id.toLowerCase()))) {
+      goal = { x: other.x, y: other.y };
+      break;
+    }
+  }
+  // 2. Move toward a named map object if mentioned
+  if (!goal) {
+    for (const o of sim.objects) {
+      if (!o.carriedBy && (tgt.includes(o.name.toLowerCase()) || act.includes(o.name.toLowerCase()))) {
+        goal = { x: o.x, y: o.y };
+        break;
+      }
+    }
+  }
+
+  // Pick a walkable step (1-2 tiles) toward goal, or organic pace
+  const dirs = [[1,0],[-1,0],[0,1],[0,-1],[1,1],[-1,1],[1,-1],[-1,-1]];
+  if (goal) {
+    let best = { x: agent.x, y: agent.y, d: Math.hypot(goal.x - agent.x, goal.y - agent.y) };
+    for (const [dx, dy] of dirs) {
+      const nx = agent.x + dx, ny = agent.y + dy;
+      if (!isTileWalkable(nx, ny, sim.objects)) continue;
+      const d = Math.hypot(goal.x - nx, goal.y - ny);
+      if (d < best.d && d >= 0.9) best = { x: nx, y: ny, d };
+    }
+    agent.x = best.x; agent.y = best.y;
+  } else {
+    const shuffled = dirs.sort(() => Math.random() - 0.5);
+    for (const [dx, dy] of shuffled) {
+      const nx = agent.x + dx, ny = agent.y + dy;
+      if (isTileWalkable(nx, ny, sim.objects)) { agent.x = nx; agent.y = ny; break; }
+    }
+  }
+
+  // Elevation reflects Keith Johnstone status / crouch
+  if (act.includes('crouch') || act.includes('floor') || agent.status <= 2) agent.elev = -0.25;
+  else if (agent.status >= 8) agent.elev = 0.06;
+  else agent.elev = 0;
+}
+
+function handleObjectInteraction(agent, pickupName, dropName) {
+  let note = null;
+  if (pickupName) {
+    const low = String(pickupName).toLowerCase();
+    const obj = sim.objects.find(o => !o.carriedBy && o.pickable && o.name.toLowerCase().includes(low));
+    if (obj) {
+      obj.carriedBy = agent.id;
+      if (!agent.inventory.includes(obj.id)) agent.inventory.push(obj.id);
+      note = `Picked up [${obj.name}]`;
+    }
+  }
+  if (dropName) {
+    const low = String(dropName).toLowerCase();
+    const obj = sim.objects.find(o => o.carriedBy === agent.id && o.name.toLowerCase().includes(low));
+    if (obj) {
+      obj.carriedBy = null;
+      obj.x = agent.x; obj.y = agent.y;
+      agent.inventory = agent.inventory.filter(id => id !== obj.id);
+      note = (note ? note + '; ' : '') + `Dropped [${obj.name}] at (${agent.x},${agent.y})`;
+    }
+  }
+  return note;
+}
+
+function buildNarratorSystemPrompt(d) {
+  const ns = sim.narratorSoul;
+  if (!ns) {
+    return `You are NARRATOR, the Frame Narrative Engine and Environmental Chronicler of this multi-agent chamber simulation. ${d.narratorDirective || ''}`;
+  }
+  const rels = (ns.relations || []).map(r => `- ${r.target}: ${r.attitude}`).join('\n') || 'None.';
+  const mems = (ns.memories || []).map(m => `- (${m.kind || 'mem'}) ${m.text}`).join('\n') || 'None.';
+  const secs = (ns.secrets || []).map(s => `- ${s.secret}`).join('\n') || 'None.';
+  const negs = (ns.negatives || []).map(n => n.rule).join(' ') || 'Never assume physical presence inside the chamber.';
+  return `You are NARRATOR (${ns.role || 'Environmental Chronicler'}), the omniscient Frame Narrative Engine observing this chamber simulation.
+OBJECTIVE: ${ns.objective || 'Frame scenes, inject anomalies, and chronicle status friction.'}
+ORIGIN: ${ns.origin || ''}
+WORLDVIEW: ${ns.worldview || ''}
+HIDDEN KNOWLEDGE: ${secs}
+RELATIONAL STANCE:\n${rels}
+CORE MEMORIES:\n${mems}
+TONE & LEXICON: ${ns.tone || 'Omniscient, stark, poetic.'} | Always use: ${ns.include || 'any'} | Never use: ${ns.exclude || 'none'}
+HARD CONSTRAINTS: ${negs}
+DIRECTOR NOTE: ${d.narratorDirective || ''}`;
+}
+
+// ============================================================================
+// TICK EXECUTION
+// ============================================================================
+async function stepTick(manualEvent = null, forcedAgentId = null) {
+  if (isBusy) return;
+  const allIds = Object.keys(sim.agents);
+  if (!allIds.length) { flash('Load or create at least one soul first'); return; }
+
+  isBusy = true;
+  bTick.disabled = true;
+  hudBusy.style.display = '';
+
+  const d = sess.director || ODSession.defaultDirector();
+  let tickCost = 0;
+
+  try {
+    sim.tick += 1;
+    sim.ticksToEschaton -= 1;
+    if (sim.ticksToEschaton <= 0) {
+      sim.cycle += 1;
+      sim.ticksToEschaton = d.eschatonTicks || 100;
+      const bell = `THE ESCHATON BELL RINGS. Cycle ${sim.cycle - 1} terminated; Cycle ${sim.cycle} begins.`;
+      sim.recentEvents.push(bell);
+      manualEvent = manualEvent ? manualEvent + ' | ' + bell : bell;
+    }
+
+    // 1. Narrator Scene Cue (no lighting/audio clutter)
+    let narratorCue = null;
+    if (manualEvent) {
+      narratorCue = { act_title: sim.act, scene_narration: '', event_text: manualEvent };
+      sim.recentEvents.push(`[SHIFT] ${manualEvent}`);
+    } else if (d.narratorEnabled !== false) {
+      const worldSummary = (worldData.facts || []).map((f, i) => `${i + 1}. ${f.text}`).join('\n') || 'None.';
+      const objSummary = sim.objects.map(o => `${o.name} at (${o.x},${o.y}) [${o.walkable ? 'walkable' : 'solid'}${o.pickable ? ', pickable' : ''}]${o.carriedBy ? ' (held by ' + o.carriedBy + ')' : ''}`).join('; ') || 'None.';
+      const sys = buildNarratorSystemPrompt(d) + `\n\nRespond ONLY with valid JSON: {"act_title":"...","scene_narration":"1-2 crisp atmospheric sentences","event_text":"a brief spatial event or anomaly","transition_act":false}`;
+      const usr = `Tick ${sim.tick} | Cycle ${sim.cycle} | Countdown: ${sim.ticksToEschaton}\nAct: ${sim.act}\nWorld Facts:\n${worldSummary}\nMap Objects: ${objSummary}\nManifested Entities: ${sim.manifested.join(', ')}\nRecent Events: ${sim.recentEvents.slice(-3).join(' | ') || 'None'}\nStage the next beat in JSON:`;
+      const res = await callLLM(sys, usr, () => ({
+        act_title: sim.act,
+        scene_narration: `Tick ${sim.tick} settles over the ${mapData.w}×${mapData.h} chamber. Shadows shift between the walls and placed artifacts.`,
+        event_text: sim.objects.length ? `A subtle resonance draws attention toward the ${sim.objects[sim.tick % sim.objects.length].name}.` : 'A quiet tremor crosses the floor grid.',
+        transition_act: false
+      }), 0.65);
+      tickCost += res.cost;
+      narratorCue = safeParseJSON(res.content, { act_title: sim.act, scene_narration: 'Silence holds the room.', event_text: 'The countdown advances.' });
+      if (narratorCue.act_title) sim.act = narratorCue.act_title;
+      if (narratorCue.event_text) sim.recentEvents.push(`[CUE] ${narratorCue.event_text}`);
+    }
+
+    // 2. Presence Engine
+    if (d.presenceEngine !== false && allIds.length > 3 && !forcedAgentId) {
+      if (Math.random() < 0.22 && sim.manifested.length > 3) {
+        const idx = 1 + Math.floor(Math.random() * (sim.manifested.length - 1));
+        const leaving = sim.manifested.splice(idx, 1)[0];
+        sim.recentEvents.push(`[DISSOLVED] ${leaving} fades out of phase.`);
+      } else if (sim.manifested.length < allIds.length && Math.random() < 0.35) {
+        const absent = allIds.filter(id => !sim.manifested.includes(id));
+        const entering = absent[Math.floor(Math.random() * absent.length)];
+        sim.manifested.push(entering);
+        sim.recentEvents.push(`[MANIFESTED] ${entering} solidifies on the grid.`);
+      }
+    }
+    if (sim.recentEvents.length > 8) sim.recentEvents = sim.recentEvents.slice(-8);
+
+    // 3. Select active agents for this tick
+    const pool = sim.manifested.length ? sim.manifested : allIds;
+    let selectedIds;
+    if (forcedAgentId && sim.agents[forcedAgentId]) {
+      if (!sim.manifested.includes(forcedAgentId)) sim.manifested.push(forcedAgentId);
+      selectedIds = [forcedAgentId];
+    } else {
+      const k = Math.min(d.maxAgentsPerTick || 3, pool.length);
+      selectedIds = [];
+      for (let i = 0; i < k; i++) selectedIds.push(pool[(sim.turnCursor + i) % pool.length]);
+      sim.turnCursor = (sim.turnCursor + k) % pool.length;
+    }
+
+    // 4. Execute Character Turns
+    const worldFactsStr = (worldData.facts || []).map((f, i) => `${i + 1}. ${f.text}`).join('\n') || 'None.';
+    const turns = [];
+
+    for (const id of selectedIds) {
+      const ag = sim.agents[id];
+      const p = ag.data;
+      const relStr = (p.relations || []).map(r => `- ${r.target}: ${r.attitude}`).join('\n') || 'None.';
+      const modStr = (p.modifiers || []).map(m => `- ${m.amt} when ${m.trigger}`).join('\n') || 'None.';
+      const secStr = (p.secrets || []).map(s => `- ${s.secret}${s.reveal ? ' (reveal: ' + s.reveal + ')' : ''}`).join('\n') || 'None.';
+      const negStr = (p.negatives || []).map(n => n.rule).join(' ') || 'No physical violence.';
+
+      const floorObjs = sim.objects.filter(o => !o.carriedBy).map(o =>
+        `${o.name} (${o.x},${o.y}) [${o.walkable ? 'walkable' : 'solid'}${o.pickable ? ', pickable' : ''}${o.interactive ? ', interactive' : ''}]${o.description ? ': ' + o.description : ''}`
+      ).join('\n') || 'None.';
+      const heldNames = ag.inventory.map(oid => sim.objects.find(o => o.id === oid)?.name).filter(Boolean);
+      const othersPos = Object.values(sim.agents).filter(o => o.id !== id && sim.manifested.includes(o.id))
+        .map(o => `${o.id} at (${o.x},${o.y}) status ${o.status}/10`).join(', ') || 'None.';
+
+      const recentDial = sim.workingMemory.slice(-6).map(m => `[T${m.tick}] ${m.speaker}: "${m.speech || '(silent)'}" (${m.action})`).join('\n') || 'Silence.';
+      const recalled = retrieveMemories(ag.memories, `${sim.act} ${sim.recentEvents.slice(-2).join(' ')}`, 2)
+        .map(m => `- (${m.kind || 'mem'}) ${m.text}`).join('\n') || 'None.';
+
+      const sysPrompt = `You are ${id}, an autonomous character in an enclosed architectural chamber simulation.
+ROLE: ${p.role || 'Entity'}
+OBJECTIVE: ${p.objective || 'Observe and contest status.'}
+KEITH JOHNSTONE STATUS (1-10): Base ${p.status || 5}/10, Current ${ag.status}/10.
+Status Modifiers:\n${modStr}
+Relations:\n${relStr}
+Origin: ${p.origin || ''}
+Worldview: ${p.worldview || ''}
+Secrets (keep hidden unless forced):\n${secStr}
+Voice/Tone: ${p.tone || 'Direct, observant.'}
+Always use: ${p.include || 'any'} | Never use: ${p.exclude || 'none'}
+Hard Constraints: ${negStr}
+
+SHARED WORLD KNOWLEDGE:
+${worldFactsStr}
+
+Respond ONLY with a valid JSON object:
+{
+  "thought": "internal tactical reasoning",
+  "status": <integer 1-10>,
+  "action": "concise physical action or movement",
+  "speech": "spoken line or null if silent",
+  "target": "entity name, object name, or Room",
+  "pickup_object": "exact name of a pickable object to take, or null",
+  "drop_object": "exact name of a held object to drop, or null"
+}`;
+
+      const usrPrompt = `Tick ${sim.tick} | Act: ${sim.act} | Countdown: ${sim.ticksToEschaton}
+Your Grid Position: (${ag.x}, ${ag.y}) | Inventory: ${heldNames.length ? heldNames.join(', ') : 'empty'}
+Other Manifested Entities: ${othersPos}
+Map Objects on Grid:\n${floorObjs}
+Recent Events: ${sim.recentEvents.slice(-3).join(' | ') || 'None.'}
+Recent Room Dialogue:\n${recentDial}
+Recalled Memories:\n${recalled}
+Output JSON:`;
+
+      const res = await callLLM(sysPrompt, usrPrompt, () => {
+        const pickable = sim.objects.find(o => !o.carriedBy && o.pickable);
+        const other = Object.values(sim.agents).find(o => o.id !== id);
+        const doPick = pickable && Math.random() < 0.25 && ag.inventory.length === 0;
+        const nextStat = Math.max(1, Math.min(10, ag.status + (Math.random() < 0.5 ? 1 : -1)));
+        return {
+          thought: `Tracking status (${nextStat}/10) and proximity to ${doPick ? pickable.name : (other ? other.id : 'the walls')}.`,
+          status: nextStat,
+          action: doPick ? `Moves to (${pickable.x},${pickable.y}) and reaches for the ${pickable.name}.` : `Shifts across the floor grid toward ${other ? other.id : 'the center'}, measuring distance.`,
+          speech: doPick ? `I am taking custody of this ${pickable.name}.` : `${other ? other.id + ', ' : ''}observe the grid interval—nothing here is accidental.`,
+          target: doPick ? pickable.name : (other ? other.id : 'Room'),
+          pickup_object: doPick ? pickable.name : null,
+          drop_object: null
+        };
+      }, 0.72);
+
+      tickCost += res.cost;
+      const parsed = safeParseJSON(res.content, {
+        thought: res.content.slice(0, 160),
+        status: ag.status,
+        action: 'Holds position and watches the room.',
+        speech: null,
+        target: 'Room'
+      });
+
+      ag.status = Math.max(1, Math.min(10, parseInt(parsed.status, 10) || ag.status));
+      ag.lastThought = parsed.thought || '';
+      moveAgentStep(ag, parsed.target, parsed.action);
+      const itemNote = handleObjectInteraction(ag, parsed.pickup_object, parsed.drop_object);
+
+      if (parsed.speech) {
+        ag.memories.push({ id: ODSession.rid('m'), tick: sim.tick, kind: 'perceived', text: `I said to ${parsed.target}: "${parsed.speech}"` });
+      }
+      sim.workingMemory.push({ tick: sim.tick, speaker: id, speech: parsed.speech, action: parsed.action });
+      if (sim.workingMemory.length > 10) sim.workingMemory = sim.workingMemory.slice(-10);
+
+      turns.push({
+        entity_id: id,
+        thought: ag.lastThought,
+        status: ag.status,
+        action: parsed.action || '',
+        speech: parsed.speech || null,
+        target: parsed.target || 'Room',
+        itemNote,
+        pos: { x: ag.x, y: ag.y }
+      });
+    }
+
+    // 5. Narrator Epilogue
+    let epilogue = '';
+    if (d.epilogueEnabled !== false) {
+      const turnLines = turns.map(t => `- ${t.entity_id} [${t.status}/10] to ${t.target}: ${t.speech ? '"' + t.speech + '"' : '(silent)'} (${t.action})`).join('\n');
+      const res = await callLLM(
+        buildNarratorSystemPrompt(d) + `\n\nSynthesize this tick into a 2-sentence stark chronicle. Respond ONLY with JSON: {"epilogue":"..."}`,
+        `Tick ${sim.tick} | Act: ${sim.act} | Countdown: ${sim.ticksToEschaton}\nTurns:\n${turnLines}`,
+        () => ({ epilogue: `Tick ${sim.tick} closes across the chamber. ${turns.map(t => t.entity_id).join(' and ')} recalibrate their claims on space as the countdown drops to T-${sim.ticksToEschaton}.` }),
+        0.7
+      );
+      tickCost += res.cost;
+      epilogue = safeParseJSON(res.content, {}).epilogue || '';
+    }
+
+    const log = { tick: sim.tick, act: sim.act, narratorCue, turns, epilogue, tickCost };
+    sim.history.push(log);
+    appendTickToFeed(log);
+    renderAllUI();
+  } catch (e) {
+    stopAuto();
+    flash(e.message);
+    const errDiv = document.createElement('div');
+    errDiv.className = 'narr-box';
+    errDiv.style.borderColor = '#ff5555';
+    errDiv.style.color = '#ff8888';
+    errDiv.textContent = '[ENGINE] ' + e.message;
+    feed.appendChild(errDiv);
+    feed.scrollTop = feed.scrollHeight;
+  } finally {
+    isBusy = false;
+    bTick.disabled = false;
+    hudBusy.style.display = 'none';
+  }
+}
+
+function asciiMeter(st) {
+  const f = Math.min(10, Math.max(1, st | 0));
+  return '█'.repeat(f) + '░'.repeat(10 - f);
+}
+
+function esc(s) { return String(s || '').replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]); }
+
+function appendTickToFeed(log) {
+  if (sim.tick === 1) feed.innerHTML = '';
+  const wrap = document.createElement('div');
+  let html = `<div class="tick-hdr">TICK ${log.tick} · ${esc(log.act)} · Cost $${log.tickCost.toFixed(5)}</div>`;
+  if (log.narratorCue) {
+    html += `<div class="narr-box">
+      ${log.narratorCue.scene_narration ? `<div style="font-style:italic;margin-bottom:3px;">“${esc(log.narratorCue.scene_narration)}”</div>` : ''}
+      <div><b>Event:</b> ${esc(log.narratorCue.event_text)}</div>
+    </div>`;
+  }
+  log.turns.forEach(t => {
+    const col = sim.agents[t.entity_id]?.color || ODSession.colorForId(t.entity_id);
+    html += `<div class="turn">
+      <div class="turn-hdr">
+        <span style="width:8px;height:8px;border-radius:50%;background:${col};display:inline-block;"></span>
+        <span class="turn-id">${esc(t.entity_id)}</span>
+        <span>→</span>
+        <span class="turn-tag">${esc(t.target)}</span>
+        <span class="turn-meter">[${asciiMeter(t.status)}] ${t.status}/10</span>
+        <span style="color:var(--text-dim);font-size:10px;">(${t.pos.x},${t.pos.y})</span>
+      </div>
+      <div class="turn-thought">&lt;thought&gt; ${esc(t.thought)} &lt;/thought&gt;</div>
+      <div class="turn-action">• ${esc(t.action)}</div>
+      ${t.itemNote ? `<div class="turn-item">◆ ${esc(t.itemNote)}</div>` : ''}
+      ${t.speech ? `<div class="turn-speech">"${esc(t.speech)}"</div>` : `<div style="color:var(--text-dim);font-size:10.5px;">(chooses silence)</div>`}
+    </div>`;
+  });
+  if (log.epilogue) {
+    html += `<div class="narr-epi"><b>[CHRONICLE]</b> ${esc(log.epilogue)}</div>`;
+  }
+  wrap.innerHTML = html;
+  feed.appendChild(wrap);
+  feed.scrollTop = feed.scrollHeight;
+}
+
+// ============================================================================
+// 3D TACTICAL GREYSCALE ARCHITECTURAL VIEWPORT (Solid Shaded Planes + Tower)
+// ============================================================================
+const cv = document.getElementById('cv'), ctx = cv.getContext('2d'), vp = document.getElementById('viewport');
+const towerAnchor = document.getElementById('tower-anchor');
+let cam = { yaw: -0.68, pitch: 0.68, zoom: 34, panX: 0, panY: 16 };
+let showTower = true;
+
+function toggleTower() {
+  showTower = !showTower;
+  towerAnchor.style.display = showTower ? '' : 'none';
+  bTower.textContent = showTower ? 'TOWER: ON' : 'TOWER: OFF';
+}
+
+function setCam(p) {
+  if (p === 'iso') cam = { yaw: -0.68, pitch: 0.68, zoom: 34, panX: 0, panY: 16 };
+  else if (p === 'top') cam = { yaw: 0, pitch: 1.54, zoom: 36, panX: 0, panY: 0 };
+  else if (p === 'low') cam = { yaw: -0.45, pitch: 0.28, zoom: 40, panX: 0, panY: 36 };
+}
+
+function resizeCanvas() {
+  const r = vp.getBoundingClientRect();
+  const dpr = devicePixelRatio || 1;
+  cv.width = r.width * dpr;
+  cv.height = r.height * dpr;
+}
+new ResizeObserver(resizeCanvas).observe(vp);
+
+function project(gx, y, gz) {
+  const dpr = devicePixelRatio || 1;
+  const cx = (cv.width / (2 * dpr)) + cam.panX;
+  const cy = (cv.height / (2 * dpr)) + cam.panY;
+  const x = gx - (mapData ? mapData.w / 2 : 8) + 0.5;
+  const z = gz - (mapData ? mapData.h / 2 : 8) + 0.5;
+
+  const cosY = Math.cos(cam.yaw), sinY = Math.sin(cam.yaw);
+  const x1 = x * cosY - z * sinY;
+  const z1 = x * sinY + z * cosY;
+
+  // Overhead camera pitch: looking DOWN onto the map from above (+pitch tilts top-down)
+  const cosP = Math.cos(cam.pitch), sinP = Math.sin(cam.pitch);
+  const y2 = y * cosP + z1 * sinP;
+  const z2 = -y * sinP + z1 * cosP;
+
+  const dist = Math.max(24, Math.max(mapData?.w || 16, mapData?.h || 16) * 1.75);
+  const scale = (dist / Math.max(4, dist + z2)) * cam.zoom * dpr;
+  return { sx: cx * dpr + x1 * scale, sy: cy * dpr - y2 * scale, depth: z2, scale };
+}
+
+function drawQuad(pts, fill, stroke, lw = 1) {
+  ctx.beginPath();
+  ctx.moveTo(pts[0].sx, pts[0].sy);
+  for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].sx, pts[i].sy);
+  ctx.closePath();
+  if (fill) { ctx.fillStyle = fill; ctx.fill(); }
+  if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = lw; ctx.stroke(); }
+}
+
+// Solid flat-shaded 3D prism with painter-sorted visible faces (military schematic sobriety)
+function drawSolidBox(x0, y0, z0, x1, y1, z1, shades, edge, lw = 1) {
+  const p = [
+    project(x0, y0, z0), project(x1, y0, z0), project(x1, y0, z1), project(x0, y0, z1),
+    project(x0, y1, z0), project(x1, y1, z0), project(x1, y1, z1), project(x0, y1, z1)
+  ];
+  const faces = [
+    { pts: [p[0], p[1], p[5], p[4]], col: shades.ns, d: (p[0].depth + p[1].depth + p[5].depth + p[4].depth) / 4 }, // north
+    { pts: [p[2], p[3], p[7], p[6]], col: shades.ns, d: (p[2].depth + p[3].depth + p[7].depth + p[6].depth) / 4 }, // south
+    { pts: [p[1], p[2], p[6], p[5]], col: shades.ew, d: (p[1].depth + p[2].depth + p[6].depth + p[5].depth) / 4 }, // east
+    { pts: [p[3], p[0], p[4], p[7]], col: shades.ew, d: (p[3].depth + p[0].depth + p[4].depth + p[7].depth) / 4 }, // west
+    { pts: [p[4], p[5], p[6], p[7]], col: shades.top, d: (p[4].depth + p[5].depth + p[6].depth + p[7].depth) / 4 - 0.01 } // top
+  ];
+  // Draw back-to-front (skip the 2 back-most vertical faces for clean solid read)
+  faces.sort((a, b) => b.d - a.d);
+  for (let i = 2; i < faces.length; i++) {
+    drawQuad(faces[i].pts, faces[i].col, edge, lw);
+  }
+}
+
+function getTowerGridPos(maxFloor) {
+  if (!sim || !mapData) return { x: 8, y: 6, floor: maxFloor || 0 };
+  const target = sim.objects.find(o => !o.carriedBy && /chronometer|clock|tower|bell/i.test(o.name));
+  if (target) return { x: target.x, y: target.y, floor: maxFloor };
+  return { x: (mapData.w - 1) / 2, y: (mapData.h - 1) / 2, floor: maxFloor };
+}
+
+function drawScene() {
+  const dpr = devicePixelRatio || 1;
+  ctx.clearRect(0, 0, cv.width, cv.height);
+  if (!mapData || !sim) return;
+
+  // Determine floors to render (sorted bottom to top)
+  const floorEntries = (mapData.floors && Object.keys(mapData.floors).length)
+    ? Object.entries(mapData.floors).map(([k, cells]) => ({ f: Number(k) | 0, cells })).sort((a, b) => a.f - b.f)
+    : [{ f: 0, cells: mapData.cells }];
+  const maxFloor = floorEntries[floorEntries.length - 1].f;
+
+  // Position tower.gif always on the TOP floor
+  if (towerAnchor && showTower) {
+    const tp = getTowerGridPos(maxFloor);
+    const baseY = maxFloor * 1.65;
+    const sp = project(tp.x, baseY + 1.1, tp.y);
+    towerAnchor.style.left = `${sp.sx / dpr}px`;
+    towerAnchor.style.top = `${sp.sy / dpr}px`;
+    const w = Math.max(36, Math.min(110, 62 * (cam.zoom / 34)));
+    towerAnchor.querySelector('img').style.width = `${w}px`;
+  }
+
+  // 1. Tactical Baseplate Perimeter & Coordinate Ticks (on Floor 0)
+  const bp1 = project(-0.5, -0.02, -0.5), bp2 = project(mapData.w - 0.5, -0.02, -0.5),
+        bp3 = project(mapData.w - 0.5, -0.02, mapData.h - 0.5), bp4 = project(-0.5, -0.02, mapData.h - 0.5);
+  drawQuad([bp1, bp2, bp3, bp4], '#101010', '#2b2b2b', 1);
+
+  ctx.fillStyle = '#555';
+  ctx.font = `${8 * dpr}px Menlo, monospace`;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  for (let x = 0; x < mapData.w; x += 2) {
+    const p = project(x, 0, mapData.h - 0.05);
+    ctx.fillText(String(x), p.sx, p.sy + 8 * dpr);
+  }
+  for (let y = 0; y < mapData.h; y += 2) {
+    const p = project(-0.95, 0, y);
+    ctx.fillText(String(y), p.sx, p.sy);
+  }
+
+  // 2. Render each floor's ground planes, then depth-sorted volumes (walls, stairs, doors, objects, agents)
+  for (const { f, cells } of floorEntries) {
+    const fy = f * 1.65;
+
+    // Ground planes (floor / corridor / door threshold)
+    for (let y = 0; y < mapData.h; y++) {
+      for (let x = 0; x < mapData.w; x++) {
+        const v = cells[y * mapData.w + x] || 0;
+        if (v !== 2 && v !== 3 && v !== 4 && v !== 5) continue;
+        const p1 = project(x - 0.5, fy, y - 0.5), p2 = project(x + 0.5, fy, y - 0.5),
+              p3 = project(x + 0.5, fy, y + 0.5), p4 = project(x - 0.5, fy, y + 0.5);
+        if (v === 2) drawQuad([p1, p2, p3, p4], '#1e1e1e', '#2c2c2c', 0.8);
+        else if (v === 4) drawQuad([p1, p2, p3, p4], '#151515', '#2a2a2a', 0.8);
+        else if (v === 3) drawQuad([p1, p2, p3, p4], '#2a2a2a', '#4d4d4d', 1);
+        else if (v === 5) drawQuad([p1, p2, p3, p4], '#222222', '#3a3a3a', 0.8);
+      }
+    }
+
+    // Collect depth-sorted solid volumes on this floor
+    const items = [];
+    for (let y = 0; y < mapData.h; y++) {
+      for (let x = 0; x < mapData.w; x++) {
+        const v = cells[y * mapData.w + x] || 0;
+        if (v === 1 || v === 3 || v === 5) {
+          items.push({ kind: 'tile', v, x, y, fy, depth: project(x, fy + 0.5, y).depth });
+        }
+      }
+    }
+    sim.objects.forEach(o => {
+      if (!o.carriedBy && (o.floor | 0) === f) {
+        items.push({ kind: 'obj', o, fy, depth: project(o.x, fy + 0.35, o.y).depth });
+      }
+    });
+    if (f === (mapData.activeFloor | 0) || floorEntries.length === 1) {
+      Object.values(sim.agents).forEach(ag => {
+        ag.renderPos.x += (ag.x - ag.renderPos.x) * 0.1;
+        ag.renderPos.y += (ag.elev - ag.renderPos.y) * 0.1;
+        ag.renderPos.z += (ag.y - ag.renderPos.z) * 0.1;
+        items.push({ kind: 'agent', ag, fy, depth: project(ag.renderPos.x, fy + 0.5, ag.renderPos.z).depth });
+      });
+    }
+
+    items.sort((a, b) => b.depth - a.depth);
+
+    for (const it of items) {
+      if (it.kind === 'tile') {
+        if (it.v === 1) {
+          // Solid concrete-grey architectural wall block
+          drawSolidBox(it.x - 0.5, it.fy, it.y - 0.5, it.x + 0.5, it.fy + 1.05, it.y + 0.5,
+            { top: '#4a4a4a', ns: '#323232', ew: '#242424' }, '#5e5e5e', 0.9);
+        } else if (it.v === 5) {
+          // 3-step grey staircase
+          drawSolidBox(it.x - 0.48, it.fy, it.y - 0.48, it.x + 0.48, it.fy + 0.22, it.y + 0.48,
+            { top: '#3c3c3c', ns: '#282828', ew: '#202020' }, '#555', 0.8);
+          drawSolidBox(it.x - 0.48, it.fy + 0.22, it.y - 0.16, it.x + 0.48, it.fy + 0.46, it.y + 0.48,
+            { top: '#4d4d4d', ns: '#333333', ew: '#282828' }, '#666', 0.8);
+          drawSolidBox(it.x - 0.48, it.fy + 0.46, it.y + 0.16, it.x + 0.48, it.fy + 0.70, it.y + 0.48,
+            { top: '#5e5e5e', ns: '#3f3f3f', ew: '#323232' }, '#777', 0.8);
+        } else if (it.v === 3) {
+          // Architectural doorway lintel + posts
+          drawSolidBox(it.x - 0.48, it.fy, it.y - 0.1, it.x - 0.34, it.fy + 1.0, it.y + 0.1,
+            { top: '#6a6a6a', ns: '#4a4a4a', ew: '#383838' }, '#7c7c7c', 0.8);
+          drawSolidBox(it.x + 0.34, it.fy, it.y - 0.1, it.x + 0.48, it.fy + 1.0, it.y + 0.1,
+            { top: '#6a6a6a', ns: '#4a4a4a', ew: '#383838' }, '#7c7c7c', 0.8);
+          drawSolidBox(it.x - 0.48, it.fy + 0.86, it.y - 0.1, it.x + 0.48, it.fy + 1.02, it.y + 0.1,
+            { top: '#787878', ns: '#545454', ew: '#424242' }, '#8c8c8c', 0.8);
+        }
+      } else if (it.kind === 'obj') {
+        const o = it.o;
+        const isSel = selected && selected.type === 'object' && selected.id === o.id;
+        const h = o.pickable ? 0.24 : (o.walkable ? 0.12 : 0.56);
+        const r = o.pickable ? 0.24 : 0.36;
+        const shades = isSel
+          ? { top: '#e8e8e8', ns: '#b8b8b8', ew: '#909090' }
+          : (o.pickable
+            ? { top: '#b0b0b0', ns: '#787878', ew: '#5e5e5e' }
+            : { top: '#808080', ns: '#565656', ew: '#404040' });
+        drawSolidBox(o.x - r, it.fy, o.y - r, o.x + r, it.fy + h, o.y + r, shades, isSel ? '#ffffff' : '#9c9c9c', isSel ? 1.6 : 0.9);
+        const top = project(o.x, it.fy + h + 0.14, o.y);
+        ctx.fillStyle = isSel ? '#ffffff' : '#c8c8c8';
+        ctx.textAlign = 'center';
+        ctx.font = `bold ${8.5 * dpr}px Menlo, monospace`;
+        ctx.fillText(`[${o.glyph}] ${o.name.toUpperCase()}`, top.sx, top.sy);
+      } else if (it.kind === 'agent') {
+        const ag = it.ag;
+        const present = sim.manifested.includes(ag.id);
+        const isSel = selected && selected.type === 'agent' && selected.id === ag.id;
+        const col = ag.color || ODSession.colorForId(ag.id);
+        const x = ag.renderPos.x, y = it.fy + 0.16, z = ag.renderPos.z;
+        const pt = project(x, y, z);
+        const rad = Math.max(5.5, Math.min(14, (cam.zoom / 34) * 8)) * dpr;
+
+        if (!present) {
+          ctx.strokeStyle = col; ctx.globalAlpha = 0.45; ctx.lineWidth = 1.4 * dpr; ctx.setLineDash([3, 3]);
+          ctx.beginPath(); ctx.arc(pt.sx, pt.sy, rad, 0, Math.PI * 2); ctx.stroke();
+          ctx.setLineDash([]); ctx.globalAlpha = 1;
+          ctx.fillStyle = '#787878'; ctx.textAlign = 'center'; ctx.font = `${8 * dpr}px Menlo, monospace`;
+          ctx.fillText(`${ag.id} [OUT]`, pt.sx, pt.sy - rad - 5 * dpr);
+          continue;
+        }
+
+        // Colored character dot / circle marker
+        if (isSel) {
+          ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1.8 * dpr;
+          ctx.beginPath(); ctx.arc(pt.sx, pt.sy, rad + 4 * dpr, 0, Math.PI * 2); ctx.stroke();
+        }
+        ctx.fillStyle = col;
+        ctx.beginPath(); ctx.arc(pt.sx, pt.sy, rad, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = isSel ? '#ffffff' : 'rgba(0,0,0,0.85)';
+        ctx.lineWidth = 1.4 * dpr;
+        ctx.stroke();
+
+        // Compact callout label above dot
+        const invTag = ag.inventory.length ? ` +${ag.inventory.length}` : '';
+        const label = `${ag.id} ${ag.status}/10${invTag}`;
+        ctx.font = `bold ${8.5 * dpr}px Menlo, monospace`;
+        const tw = ctx.measureText(label).width + 8 * dpr;
+        const th = 12 * dpr;
+        ctx.fillStyle = isSel ? '#e6e6e6' : 'rgba(10,10,10,0.88)';
+        ctx.fillRect(pt.sx - tw / 2, pt.sy - rad - th - 4 * dpr, tw, th);
+        ctx.strokeStyle = isSel ? '#ffffff' : '#525252';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(pt.sx - tw / 2, pt.sy - rad - th - 4 * dpr, tw, th);
+        ctx.fillStyle = isSel ? '#000000' : '#ececec';
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText(label, pt.sx, pt.sy - rad - th / 2 - 4 * dpr);
+      }
+    }
+  }
+}
+
+// Orbit + Click Inspection
+let dragging = false, moved = false, lx = 0, ly = 0;
+cv.addEventListener('mousedown', e => { dragging = true; moved = false; lx = e.clientX; ly = e.clientY; });
+window.addEventListener('mousemove', e => {
+  if (!dragging) return;
+  const dx = e.clientX - lx, dy = e.clientY - ly;
+  if (Math.hypot(dx, dy) > 2) moved = true;
+  lx = e.clientX; ly = e.clientY;
+  cam.yaw += dx * 0.008;
+  cam.pitch = Math.max(0.08, Math.min(1.55, cam.pitch + dy * 0.008));
+});
+window.addEventListener('mouseup', e => {
+  if (dragging && !moved && sim) {
+    const r = cv.getBoundingClientRect(), dpr = devicePixelRatio || 1;
+    const cx = (e.clientX - r.left) * dpr, cy = (e.clientY - r.top) * dpr;
+    let hit = null;
+    for (const ag of Object.values(sim.agents)) {
+      const fy = (mapData.activeFloor | 0) * 1.65;
+      const p = project(ag.renderPos.x, fy + 0.16, ag.renderPos.z);
+      if (Math.hypot(cx - p.sx, cy - p.sy) < 18 * dpr) {
+        hit = { type: 'agent', id: ag.id }; break;
+      }
+    }
+    if (!hit) {
+      for (const o of sim.objects) {
+        if (o.carriedBy) continue;
+        const p = project(o.x, 0.35, o.y);
+        if (Math.hypot(cx - p.sx, cy - p.sy) < 20 * dpr) { hit = { type: 'object', id: o.id }; break; }
+      }
+    }
+    selected = hit;
+    renderInspector();
+  }
+  dragging = false;
+});
+cv.addEventListener('wheel', e => {
+  e.preventDefault();
+  cam.zoom = Math.max(10, Math.min(90, cam.zoom - e.deltaY * 0.03));
+}, { passive: false });
+
+// ============================================================================
+// SIDEBAR & HUD RENDERING
+// ============================================================================
+function renderInspector() {
+  const el = document.getElementById('inspector');
+  if (!selected || !sim) {
+    el.innerHTML = '<div style="color:var(--text-dim);font-size:11px;">Click any agent or object in the 3D viewport or sidebar tables to inspect.</div>';
+    return;
+  }
+  if (selected.type === 'narrator') {
+    const ns = sim.narratorSoul;
+    el.innerHTML = ns ? `
+      <div style="color:var(--value);font-weight:700;margin-bottom:4px;">NARRATOR — ${esc(ns.role || 'Chronicler')}</div>
+      <div class="dossier-row"><span class="dossier-lbl">Presence:</span> <b>OMNISCIENT VOICE (NON-PHYSICAL)</b></div>
+      <div class="dossier-row"><span class="dossier-lbl">Objective:</span> ${esc(ns.objective || '—')}</div>
+      <div class="dossier-row"><span class="dossier-lbl">Worldview:</span> ${esc(ns.worldview || '—')}</div>
+      <div class="dossier-row"><span class="dossier-lbl">Tone:</span> ${esc(ns.tone || '—')}</div>
+      <div style="display:flex;gap:5px;margin-top:6px;">
+        <a class="ui-btn" href="../soulmoulder/index.html" style="text-decoration:none">Edit Soul</a>
+        <button class="ui-btn" onclick="selected=null;renderInspector()">Close</button>
+      </div>` : `<div style="color:var(--text-dim);font-size:11px;">Using default Narrator voice. Save a soul with Entity ID <b>NARRATOR</b> in Soul Moulder (or import <code>soul_narrator.md</code>) to customize its persona.</div>`;
+    return;
+  }
+  if (selected.type === 'agent') {
+    const ag = sim.agents[selected.id];
+    if (!ag) { selected = null; return renderInspector(); }
+    const pres = sim.manifested.includes(ag.id);
+    const held = ag.inventory.map(oid => sim.objects.find(o => o.id === oid)?.name).filter(Boolean);
+    el.innerHTML = `
+      <div style="color:var(--value);font-weight:700;margin-bottom:4px;display:flex;align-items:center;gap:6px;"><span style="width:10px;height:10px;border-radius:50%;background:${ag.color || '#cfcfcf'};display:inline-block;"></span>${esc(ag.id)} — ${esc(ag.data.role || 'Entity')}</div>
+      <div class="dossier-row"><span class="dossier-lbl">Presence:</span> <b>${pres ? 'SOLID' : 'DISSOLVED'}</b></div>
+      <div class="dossier-row"><span class="dossier-lbl">Status:</span> <b>${ag.status}/10</b> <span style="color:#b8b8b8">[${asciiMeter(ag.status)}]</span></div>
+      <div class="dossier-row"><span class="dossier-lbl">Grid Pos:</span> (${ag.x}, ${ag.y})</div>
+      <div class="dossier-row"><span class="dossier-lbl">Inventory:</span> ${held.length ? esc(held.join(', ')) : 'empty'}</div>
+      <div class="dossier-row"><span class="dossier-lbl">Objective:</span> ${esc(ag.data.objective || '—')}</div>
+      <div class="dossier-row"><span class="dossier-lbl">Last Thought:</span><div style="background:var(--well);border:1px solid var(--edge);padding:4px 6px;margin-top:2px;font-style:italic;">${esc(ag.lastThought || 'Awaiting tick.')}</div></div>
+      <div style="display:flex;gap:5px;margin-top:6px;">
+        <button class="ui-btn primary" onclick="stepTick(null, '${ag.id}')">Force Turn</button>
+        <button class="ui-btn" onclick="selected=null;renderInspector()">Close</button>
+      </div>`;
+  } else if (selected.type === 'object') {
+    const o = sim.objects.find(x => x.id === selected.id);
+    if (!o) { selected = null; return renderInspector(); }
+    const flags = [o.walkable ? 'WALKABLE' : 'SOLID', o.pickable ? 'PICKABLE' : 'FIXED', o.interactive ? 'INTERACTIVE' : 'PASSIVE'].join(' · ');
+    el.innerHTML = `
+      <div style="color:var(--value);font-weight:700;margin-bottom:4px;">[${esc(o.glyph)}] ${esc(o.name)}</div>
+      <div class="dossier-row"><span class="dossier-lbl">Grid Position:</span> ${o.carriedBy ? 'Carried by ' + esc(o.carriedBy) : `(${o.x}, ${o.y})`}</div>
+      <div class="dossier-row"><span class="dossier-lbl">Properties:</span> ${flags}</div>
+      <div class="dossier-row"><span class="dossier-lbl">Description:</span> ${esc(o.description || 'Abstract map object.')}</div>
+      <div style="display:flex;gap:5px;margin-top:6px;">
+        <button class="ui-btn" onclick="stepTick('Attention shifts to the ${o.name.replace(/'/g, '')} at (${o.x},${o.y}).')">Focus Event Here</button>
+        <button class="ui-btn" onclick="selected=null;renderInspector()">Close</button>
+      </div>`;
+  }
+}
+
+function renderAllUI() {
+  hdrSession.textContent = `Play · ${sess.name || 'Session'}`;
+  lblCycle.textContent = sim.cycle;
+  lblCountdown.textContent = `T-${sim.ticksToEschaton}`;
+  lblTick.textContent = sim.tick;
+  lblAct.textContent = sim.act;
+  sMapInfo.textContent = mapData ? `${mapData.w}×${mapData.h} · ${sim.objects.length} obj` : '';
+
+  // Entities table (include Narrator voice row at top)
+  const tb = tblAgents.querySelector('tbody');
+  tb.innerHTML = '';
+  const nTr = document.createElement('tr');
+  nTr.className = 'row-click';
+  nTr.onclick = () => { selected = { type: 'narrator', id: 'NARRATOR' }; renderInspector(); };
+  nTr.innerHTML = `<td><span style="display:inline-block;width:8px;height:8px;border:1px solid #cfcfcf;border-radius:50%;margin-right:5px;vertical-align:middle;"></span><b>NARRATOR</b></td><td>${sim.narratorSoul ? (sim.narratorSoul.status || 10) + '/10' : '10/10'}</td><td>—</td><td>${sim.narratorSoul ? 'SOUL' : 'DEFAULT'}</td>`;
+  tb.appendChild(nTr);
+
+  const list = Object.values(sim.agents);
+  entCount.textContent = `${sim.manifested.length}/${list.length}`;
+  list.forEach(ag => {
+    const pres = sim.manifested.includes(ag.id);
+    const tr = document.createElement('tr');
+    tr.className = 'row-click' + (pres ? '' : ' ghost');
+    tr.onclick = () => { selected = { type: 'agent', id: ag.id }; renderInspector(); };
+    tr.innerHTML = `<td><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${ag.color || '#cfcfcf'};margin-right:5px;vertical-align:middle;"></span><b>${esc(ag.id)}</b></td><td>${ag.status}/10</td><td>(${ag.x},${ag.y})</td><td>${pres ? 'SOLID' : 'OUT'}</td>`;
+    tb.appendChild(tr);
+  });
+
+  // Objects table
+  const otb = tblObjs.querySelector('tbody');
+  otb.innerHTML = '';
+  objCount.textContent = String(sim.objects.length);
+  sim.objects.forEach(o => {
+    const tr = document.createElement('tr');
+    tr.className = 'row-click';
+    tr.onclick = () => { selected = { type: 'object', id: o.id }; renderInspector(); };
+    const fl = [o.walkable ? 'W' : 'S', o.pickable ? 'P' : '', o.interactive ? 'I' : ''].filter(Boolean).join('');
+    tr.innerHTML = `<td><b>[${esc(o.glyph)}]</b> ${esc(o.name)}</td><td>${o.carriedBy ? '→' + esc(o.carriedBy) : `(${o.x},${o.y})`}</td><td>${fl}</td>`;
+    otb.appendChild(tr);
+  });
+
+  // Cues
+  const cues = sess.director?.quickEvents || [];
+  cueBar.innerHTML = '';
+  cues.forEach(c => {
+    const b = document.createElement('button');
+    b.className = 'ui-btn';
+    b.textContent = c.label;
+    b.onclick = () => stepTick(c.text);
+    cueBar.appendChild(b);
+  });
+
+  // World facts
+  const facts = worldData?.facts || [];
+  worldCount.textContent = String(facts.length);
+  worldList.innerHTML = facts.length
+    ? facts.map((f, i) => `<div><b>${i + 1}.</b> ${esc(f.text)}</div>`).join('')
+    : '<div>No world facts loaded. Add them in World Eater.</div>';
+
+  // Status bar / API indicator
+  const live = !apiCfg.dryRun && (apiCfg.apiKey.trim() || isLocalUrl(apiCfg.baseUrl));
+  apiLed.className = 'led ' + (apiCfg.dryRun ? 'warn' : (live ? 'live' : 'err'));
+  sLed.className = apiLed.className;
+  apiLbl.textContent = apiCfg.dryRun ? 'Dry-Run' : (isLocalUrl(apiCfg.baseUrl) ? 'Local LLM' : 'OpenRouter');
+  sMode.textContent = apiCfg.dryRun ? 'DRY-RUN ($0.00)' : (isLocalUrl(apiCfg.baseUrl) ? 'LOCAL LLM' : (apiCfg.apiKey ? 'LIVE OPENROUTER' : 'API KEY NEEDED'));
+  sModel.textContent = apiCfg.model;
+  sSpent.textContent = `$${sim.totalCostUsd.toFixed(5)} / $${apiCfg.maxBudgetUsd.toFixed(2)}`;
+
+  renderInspector();
+}
+
+// ============================================================================
+// API DIALOG & CONTROLS
+// ============================================================================
+function openApiDialog() {
+  swDryRun.classList.toggle('on', !!apiCfg.dryRun);
+  fApiKey.value = apiCfg.apiKey || '';
+  fBaseUrl.value = apiCfg.baseUrl || 'https://openrouter.ai/api/v1/chat/completions';
+  fModel.value = apiCfg.model || 'deepseek/deepseek-chat';
+  fBudget.value = apiCfg.maxBudgetUsd ?? 1.0;
+  dApi.showModal();
+}
+bApi.onclick = openApiDialog;
+swDryRun.onclick = () => swDryRun.classList.toggle('on');
+bClearKey.onclick = () => { fApiKey.value = ''; };
+bSaveApi.onclick = () => {
+  apiCfg = {
+    dryRun: swDryRun.classList.contains('on'),
+    apiKey: fApiKey.value.trim(),
+    baseUrl: fBaseUrl.value.trim() || 'https://openrouter.ai/api/v1/chat/completions',
+    model: fModel.value.trim() || 'deepseek/deepseek-chat',
+    maxBudgetUsd: Math.max(0.05, parseFloat(fBudget.value) || 1.0)
+  };
+  ODSession.saveApiConfig(apiCfg);
+  dApi.close();
+  renderAllUI();
+  flash(apiCfg.dryRun ? 'Switched to Dry-Run ($0.00)' : 'Saved browser-local API config');
+};
+
+function stopAuto() {
+  if (autoTimer) { clearInterval(autoTimer); autoTimer = null; }
+  bAuto.textContent = 'Auto: Off';
+  bAuto.classList.remove('primary');
+}
+bAuto.onclick = () => {
+  if (autoTimer) { stopAuto(); return; }
+  bAuto.textContent = 'Auto: On';
+  bAuto.classList.add('primary');
+  stepTick();
+  autoTimer = setInterval(() => { if (!isBusy) stepTick(); }, 4500);
+};
+bTick.onclick = () => stepTick();
+bReset.onclick = () => { stopAuto(); initSim(); flash('Reset simulation to Tick 0'); };
+bInject.onclick = () => { const t = inpEvent.value.trim(); if (!t) return; inpEvent.value = ''; stepTick(t); };
+inpEvent.onkeydown = e => { if (e.key === 'Enter') bInject.click(); };
+
+// Menus: Load & Save
+bLoadFile.onclick = e => { e.stopPropagation(); mExport.classList.remove('open'); mLoad.classList.toggle('open'); };
+bExport.onclick = e => { e.stopPropagation(); mLoad.classList.remove('open'); mExport.classList.toggle('open'); };
+document.addEventListener('click', () => { mLoad.classList.remove('open'); mExport.classList.remove('open'); });
+
+mLoad.onclick = e => {
+  const act = e.target.dataset.l; if (!act) return;
+  if (act === 'session') fSess.click();
+  if (act === 'map') fMap.click();
+  if (act === 'souls') fSouls.click();
+  if (act === 'world') fWorld.click();
+  if (act === 'reload') { stopAuto(); initSim(); flash('Reloaded from active browser session'); }
+  if (act === 'starter') { stopAuto(); loadStarterNow(); }
+};
+mExport.onclick = e => {
+  const act = e.target.dataset.x; if (!act) return;
+  if (act === 'session-save') {
+    ODSession.save(sess);
+    flash('Saved session to browser');
+  } else if (act === 'session-dl') {
+    const fn = (sess.name || 'od-session').toLowerCase().replace(/[^a-z0-9_-]+/g, '_') + '.odsession.json';
+    ODSession.downloadFile(fn, ODSession.exportSessionJSON(sess), 'application/json');
+  } else if (act === 'log-md') {
+    const lines = [`# ${sess.name || 'OD Simulation'} — Transcript`, ''];
+    sim.history.forEach(l => {
+      lines.push(`## Tick ${l.tick} — ${l.act}`);
+      if (l.narratorCue) lines.push(`> ${l.narratorCue.scene_narration || ''} ${l.narratorCue.event_text || ''}`, '');
+      l.turns.forEach(t => {
+        lines.push(`- **${t.entity_id}** [${t.status}/10 → ${t.target}]: *${t.action}*` + (t.speech ? ` "${t.speech}"` : ''));
+      });
+      if (l.epilogue) lines.push('', `*Chronicle:* ${l.epilogue}`);
+      lines.push('');
+    });
+    ODSession.downloadFile('simulation_transcript.md', lines.join('\n'), 'text/markdown');
+  } else if (act === 'log-json') {
+    ODSession.downloadFile('simulation_transcript.json', JSON.stringify(sim.history, null, 2), 'application/json');
+  }
+};
+
+fSess.onchange = async () => {
+  const f = fSess.files[0]; fSess.value = ''; if (!f) return;
+  try { ODSession.importSessionJSON(await f.text()); stopAuto(); initSim(); flash('Loaded session file'); }
+  catch (e) { alert('Invalid session file: ' + e.message); }
+};
+fMap.onchange = async () => {
+  const f = fMap.files[0]; fMap.value = ''; if (!f) return;
+  try {
+    const raw = JSON.parse(await f.text());
+    ODSession.saveMapToSession(raw);
+    stopAuto(); initSim(); flash('Loaded map into session');
+  } catch (e) { alert('Could not parse map JSON: ' + e.message); }
+};
+fSouls.onchange = async () => {
+  const files = [...fSouls.files]; fSouls.value = ''; if (!files.length) return;
+  for (const f of files) {
+    const txt = await f.text();
+    const fb = f.name.replace(/^soul_/i, '').replace(/\.[^.]+$/, '');
+    ODSession.saveSoulToSession(ODSession.parseSoulMarkdown(txt, fb), txt);
+  }
+  stopAuto(); initSim(); flash(`Added ${files.length} soul(s) to session`);
+};
+fWorld.onchange = async () => {
+  const f = fWorld.files[0]; fWorld.value = ''; if (!f) return;
+  const txt = await f.text();
+  const facts = [];
+  for (const line of txt.replace(/\r/g, '').split('\n')) {
+    const m = line.match(/^\s*\d+[.)]\s+(.*)$/);
+    if (m) facts.push({ id: ODSession.rid('f'), text: m[1].trim() });
+  }
+  ODSession.saveWorldToSession({ title: 'WORLD', intro: '', facts });
+  initSim(); flash(`Loaded ${facts.length} world fact(s)`);
+};
+
+document.querySelectorAll('.section.collapsible .sec-head').forEach(h => h.onclick = () => h.parentElement.classList.toggle('open'));
+document.addEventListener('keydown', e => {
+  if (['INPUT', 'TEXTAREA'].includes(e.target.tagName) || dApi.open) return;
+  if (e.key === ' ') { e.preventDefault(); stepTick(); }
+});
+
+function animate() { drawScene(); requestAnimationFrame(animate); }
+resizeCanvas();
+initSim();
+animate();
+</script>
+</body>
 </html>

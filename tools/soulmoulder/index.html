@@ -28,6 +28,16 @@ textarea.ui-field { height: auto; min-height: 44px; padding: 4px 6px; resize: ve
 .ui-add:hover { background: var(--button); color: var(--text); }
 .section.later .sec-head { color: var(--text-dim); }
 .sec-head.fold { cursor: default; }
+.cast-list { display: flex; flex-direction: column; gap: 4px; }
+.cast-row { display: grid; grid-template-columns: 1fr auto auto 22px; gap: 6px; align-items: center;
+  padding: 4px 6px; background: var(--well); border: 1px solid var(--edge); border-radius: 2px; cursor: pointer; }
+.cast-row:hover { background: var(--well-hover); }
+.cast-row.active { border-color: var(--accent); background: #141414; }
+.cast-row.off { opacity: .48; }
+.cast-id { color: var(--value); font-weight: 600; }
+.cast-role { color: var(--text-dim); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cast-stat { color: var(--text-dim); font-size: 11px; font-variant-numeric: tabular-nums; }
+.cast-bar { display: flex; gap: 6px; flex-wrap: wrap; }
 @media (max-width: 760px) { #main { grid-template-columns: 1fr; grid-template-rows: 1fr 40%; } #form { border-right: 0; border-bottom: 1px solid var(--edge); } }
 </style>
 </head>
@@ -37,6 +47,7 @@ textarea.ui-field { height: auto; min-height: 44px; padding: 4px 6px; resize: ve
   <symbol id="i-new" viewBox="0 0 16 16"><path d="M4 1.5h5.5L12.5 4.5V14.5H4z M9.5 1.5v3h3"/></symbol>
   <symbol id="i-open" viewBox="0 0 16 16"><path d="M1.5 4.5v8.5h13V6H7.5L6 4.5z M1.5 4.5V3h4l1 1.5"/></symbol>
   <symbol id="i-down" viewBox="0 0 16 16"><path d="M8 2v8 M4.5 7L8 10.5 11.5 7 M2.5 13.5h11"/></symbol>
+  <symbol id="i-save" viewBox="0 0 16 16"><path d="M3 2h8l2 2v10H3z M5.5 2v4h5V2 M5 14v-4h6v4"/></symbol>
   <symbol id="i-chev" viewBox="0 0 12 12"><path d="M4.5 3L7.5 6 4.5 9"/></symbol>
   <symbol id="i-plus" viewBox="0 0 12 12"><path d="M3 6h6 M6 3v6"/></symbol>
   <symbol id="i-x" viewBox="0 0 12 12"><path d="M3.5 3.5l5 5 M8.5 3.5l-5 5"/></symbol>
@@ -54,9 +65,13 @@ textarea.ui-field { height: auto; min-height: 44px; padding: 4px 6px; resize: ve
       <button class="tool" id="bNew" title="New soul"><svg class="i"><use href="#i-new"/></svg></button>
       <button class="tool" id="bOpen" title="Open a soul .md"><svg class="i"><use href="#i-open"/></svg></button>
       <input type="file" id="file" accept=".md,.markdown,.txt" hidden>
+      <input type="file" id="fileBatch" accept=".md,.markdown,.txt" multiple hidden>
     </div>
     <div class="title" id="title">Soul Moulder</div>
     <div class="r">
+      <button class="ui-btn" id="bSaveSess" title="Save this soul into the active Session (Ctrl+S)"><svg class="i s"><use href="#i-save"/></svg>Save to Session</button>
+      <a class="ui-btn" href="../play/index.html" style="text-decoration:none">Play →</a>
+      <div class="vsep"></div>
       <button class="ui-btn primary" id="bExport"><svg class="i"><use href="#i-down"/></svg>Export</button>
       <div class="menu" id="mExport">
         <button data-x="copy">Copy markdown</button>
@@ -67,11 +82,29 @@ textarea.ui-field { height: auto; min-height: 44px; padding: 4px 6px; resize: ve
 
   <div id="main">
     <div id="form">
+      <div class="section collapsible open" id="secSession">
+        <div class="sec-head fold"><svg class="i s chev"><use href="#i-chev"/></svg>Session Cast <span id="castCount" style="margin-left:auto;color:var(--text-dim);font-weight:400;font-size:11px;">0 saved</span></div>
+        <div class="sec-body">
+          <div class="cast-bar">
+            <button class="ui-btn" id="bImportBatch" title="Import one or more soul .md files directly into the Session">+ Load .md files into Session</button>
+            <button class="ui-btn" id="bLoadStarter" title="Populate session with starter Decameron cast">Load Starter Cast</button>
+          </div>
+          <div class="cast-list" id="castList"></div>
+        </div>
+      </div>
+
       <div class="section collapsible open">
         <div class="sec-head fold"><svg class="i s chev"><use href="#i-chev"/></svg>Core identity</div>
         <div class="sec-body">
           <div class="row"><label title="Unique identifier or name">Entity ID</label><input class="ui-field" data-k="id" placeholder="Vessel_03"></div>
           <div class="row"><label title="Protagonist, Observer, Antagonist, Catalyst, or your own">System role</label><input class="ui-field" data-k="role" list="dl-role" placeholder="Catalyst"></div>
+          <div class="row"><label title="Dot color used on the 3D Play map and Director">Marker color</label>
+            <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+              <input type="color" id="cPick" value="#c2410c" style="width:26px;height:22px;padding:0;border:1px solid var(--well-border);background:var(--well);cursor:pointer;">
+              <input class="ui-field" data-k="color" id="cHex" style="width:86px;" placeholder="#c2410c">
+              <div id="cSwatches" style="display:flex;gap:3px;align-items:center;"></div>
+            </div>
+          </div>
           <div class="row"><label title="The core drive or narrative goal of the agent">Objective</label><textarea class="ui-field" data-k="objective" rows="2" placeholder="Extract information from Entity_B."></textarea></div>
         </div>
       </div>
@@ -126,23 +159,23 @@ textarea.ui-field { height: auto; min-height: 44px; padding: 4px 6px; resize: ve
   <div id="status">
     <div class="cell"><i class="led" id="led"></i><span id="sFill"></span></div>
     <div class="cell" id="sFile"></div>
-    <div class="cell grow"></div>
+    <div class="cell grow" id="sMsg" style="color:var(--value)"></div>
     <div class="cell" id="sWords"></div>
   </div>
 </div>
 
+<script src="../../shared/session.js"></script>
 <script>
 // ---------------------------------------------------------------- model
 const KEY = 'od.soulmoulder.v1';
 const DEFAULT_FORMAT = 'Internal reasoning must be enclosed in <thought> tags. Speech must be plain text.';
 const blank = () => ({
-  id: '', role: '', objective: '', status: 5,
+  id: '', role: '', color: '#c2410c', objective: '', status: 5,
   modifiers: [], relations: [],
   origin: '', worldview: '', secrets: [],
   tone: '', include: '', exclude: '', format: DEFAULT_FORMAT,
   memories: [], actions: [], negatives: [],
 });
-// Repeatable rows: [field, placeholder, column width, datalist]
 const LISTS = {
   modifiers: { add: 'Modifier', cols: [['amt', '+2', '52px'], ['trigger', 'discussing technology']] },
   relations: { add: 'Relation', cols: [['target', 'Entity_B'], ['attitude', 'Suspicious', null, 'dl-att']] },
@@ -156,81 +189,118 @@ let S = blank();
 try { const saved = JSON.parse(localStorage.getItem(KEY)); if (saved) S = { ...blank(), ...saved }; } catch {}
 const persist = () => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch {} };
 
-// ---------------------------------------------------------------- markdown out (the soul template's exact layout)
-const ml = v => String(v || '').trim().replace(/\r/g, '').split('\n').join('\n    ');   // continuation lines indent 4
-const list = v => String(v || '').split(',').map(s => s.trim()).filter(Boolean);
-const rows = (k) => S[k].filter(r => Object.values(r).some(v => String(v).trim()));
-function toMarkdown() {
-  const L = [];
-  const f = (label, v) => L.push(`*   **${label}:**${String(v ?? '').trim() ? ' ' + ml(v) : ''}`);
-  const sub = (s) => L.push(`    *   ${ml(s)}`);
-  L.push(`# SOUL TEMPLATE: ${S.id.trim() || '[Character_Name]'}`, '');
-  L.push('## 1. Core Identity Definition');
-  f('Entity ID', S.id); f('System Role', S.role); f('Primary Objective Vector', S.objective);
-  L.push('', '## 2. Improvisational Matrix & Status');
-  f('Base Status Level (1-10)', S.status);
-  f('Status Modifiers', ''); rows('modifiers').forEach(r => sub(r.amt.trim() ? `${r.amt.trim()} when ${r.trigger.trim()}` : r.trigger.trim()));
-  f('Relational Dynamics', ''); rows('relations').forEach(r => sub(`*Target ${r.target.trim()}:* ${r.attitude.trim()}`));
-  L.push('', '## 3. Epistemological State (Character Bible)');
-  f('Origin/Prior State', S.origin); f('Worldview/Bias', S.worldview);
-  f('Hidden State (Secrets)', ''); rows('secrets').forEach(r => sub(`${r.secret.trim()}${r.reveal.trim() ? ` — *reveal when:* ${r.reveal.trim()}` : ''}`));
-  L.push('', '## 4. Linguistic & Output Parameters');
-  f('Syntax/Tone', S.tone);
-  f('Lexical Constraints', '');
-  if (list(S.include).length) sub(`*Always use:* ${list(S.include).join(', ')}`);
-  if (list(S.exclude).length) sub(`*Never use:* ${list(S.exclude).join(', ')}`);
-  f('Output Formatting', S.format);
-  L.push('', '## 5. Pre-loaded Memory');
-  rows('memories').forEach((r, i) => f(`Memory_${String(i + 1).padStart(2, '0')} (${r.kind.trim() || 'Note'})`, r.text));
-  L.push('', '## 6. Action Space & Hard Constraints');
-  f('Permitted Interactions', ''); rows('actions').forEach(r => sub(r.act.trim()));
-  f('Negative Constraints', ''); rows('negatives').forEach(r => sub(r.rule.trim()));
-  return L.join('\n') + '\n';
+const rows = (k) => (S[k] || []).filter(r => Object.values(r).some(v => String(v).trim()));
+const toMarkdown = () => ODSession.soulToMarkdown(S);
+const fromMarkdown = (text, fallback) => ({ ...blank(), ...ODSession.parseSoulMarkdown(text, fallback) });
+
+// ---------------------------------------------------------------- session cast
+const $ = s => document.querySelector(s);
+let flashTimer = 0;
+function flash(msg) { $('#sMsg').textContent = msg; clearTimeout(flashTimer); flashTimer = setTimeout(() => $('#sMsg').textContent = '', 3500); }
+
+function renderSessionCast() {
+  const sess = ODSession.load();
+  const entries = Object.values(sess.souls || {});
+  $('#castCount').textContent = `${entries.length} saved in session`;
+  const box = $('#castList');
+  box.innerHTML = '';
+  if (!entries.length) {
+    box.innerHTML = '<div style="color:var(--text-dim);font-size:11px;padding:2px 0;">No souls saved to session yet. Edit below and click "Save to Session", or load .md files.</div>';
+    return;
+  }
+  const curId = (S.id || '').trim().toUpperCase();
+  entries.forEach(entry => {
+    const row = document.createElement('div');
+    row.className = 'cast-row' + (entry.id === curId ? ' active' : '') + (entry.enabled === false ? ' off' : '');
+    const role = entry.data?.role || 'Character';
+    const st = entry.data?.status || 5;
+    const col = entry.data?.color || ODSession.colorForId(entry.id);
+    row.innerHTML = `
+      <div style="min-width:0;display:flex;align-items:center;gap:6px;">
+        <span style="width:9px;height:9px;border-radius:50%;background:${col};flex:none;border:1px solid rgba(255,255,255,.3);"></span>
+        <span class="cast-id">${entry.id}</span>
+        ${entry.id === 'NARRATOR' ? '<span style="font-size:9.5px;border:1px solid var(--well-border);padding:0 3px;color:var(--value);">VOICE</span>' : ''}
+        <span class="cast-role"> · ${role}</span>
+      </div>
+      <span class="cast-stat">${st}/10</span>
+      <button class="switch ${entry.enabled !== false ? 'on' : ''}" title="Include in Play simulation"></button>
+      <button class="item x" style="width:20px;height:20px;background:transparent;border:0;color:var(--text-dim);cursor:pointer" title="Remove from session"><svg class="i s"><use href="#i-x"/></svg></button>
+    `;
+    row.onclick = (e) => {
+      if (e.target.closest('button')) return;
+      S = { ...blank(), ...(entry.data || fromMarkdown(entry.markdown, entry.id)) };
+      renderAll();
+      flash(`Loaded ${entry.id} from session`);
+    };
+    row.querySelector('.switch').onclick = (e) => {
+      e.stopPropagation();
+      ODSession.update(s => { if (s.souls[entry.id]) s.souls[entry.id].enabled = entry.enabled === false; });
+      renderSessionCast();
+    };
+    row.querySelector('.x').onclick = (e) => {
+      e.stopPropagation();
+      ODSession.removeSoulFromSession(entry.id);
+      renderSessionCast();
+      flash(`Removed ${entry.id} from session`);
+    };
+    box.appendChild(row);
+  });
 }
 
-// ---------------------------------------------------------------- markdown in (reads files this tool exported)
-function fromMarkdown(text) {
-  const out = blank(); out.format = '';
-  const fields = [];                                  // [{label, value, subs: []}]
-  let cur = null, lastSub = false;
-  for (const raw of text.replace(/\r/g, '').split('\n')) {
-    let m;
-    if ((m = raw.match(/^\*\s+\*\*(.+?):\*\*\s?(.*)$/))) { cur = { label: m[1], value: m[2], subs: [] }; fields.push(cur); lastSub = false; }
-    else if (cur && (m = raw.match(/^ {4}\*\s+(.*)$/))) { cur.subs.push(m[1]); lastSub = true; }
-    else if (cur && /^ {4}\S/.test(raw)) {             // continuation of a value or sub-item
-      if (lastSub) cur.subs[cur.subs.length - 1] += '\n' + raw.slice(4); else cur.value += '\n' + raw.slice(4);
-    } else if (/^#/.test(raw)) cur = null;
+bSaveSess.onclick = () => {
+  if (!S.id.trim()) { flash('Enter an Entity ID before saving to session'); document.querySelector('[data-k="id"]').focus(); return; }
+  ODSession.saveSoulToSession(S, toMarkdown());
+  renderSessionCast();
+  flash(`Saved ${S.id.trim().toUpperCase()} to Session`);
+};
+bImportBatch.onclick = () => fileBatch.click();
+fileBatch.onchange = async () => {
+  const files = [...fileBatch.files]; fileBatch.value = '';
+  if (!files.length) return;
+  let last = null;
+  for (const f of files) {
+    const txt = await f.text();
+    const fallback = f.name.replace(/^soul_/i, '').replace(/\.[^.]+$/, '');
+    const parsed = fromMarkdown(txt, fallback);
+    ODSession.saveSoulToSession(parsed, txt);
+    last = parsed;
   }
-  for (const { label, value, subs } of fields) {
-    const v = value.trim(); let m;
-    if (label === 'Entity ID') out.id = v;
-    else if (label === 'System Role') out.role = v;
-    else if (label === 'Primary Objective Vector') out.objective = v;
-    else if (label.startsWith('Base Status Level')) out.status = Math.min(10, Math.max(1, parseInt(v) || 5));
-    else if (label === 'Status Modifiers') out.modifiers = subs.map(s => (m = s.match(/^([+\-−]?\d+)\s+(?:when\s+)?([\s\S]*)$/)) ? { amt: m[1], trigger: m[2] } : { amt: '', trigger: s });
-    else if (label === 'Relational Dynamics') out.relations = subs.map(s => (m = s.match(/^\*Target (.+?):\*\s*([\s\S]*)$/)) ? { target: m[1], attitude: m[2] } : { target: s, attitude: '' });
-    else if (label === 'Origin/Prior State') out.origin = v;
-    else if (label === 'Worldview/Bias') out.worldview = v;
-    else if (label === 'Hidden State (Secrets)') out.secrets = subs.map(s => { const [a, b] = s.split(/\s+—\s+\*reveal when:\*\s*/); return { secret: a, reveal: b || '' }; });
-    else if (label === 'Syntax/Tone') out.tone = v;
-    else if (label === 'Lexical Constraints') for (const s of subs) {
-      if ((m = s.match(/^\*Always use:\*\s*(.*)$/))) out.include = m[1];
-      if ((m = s.match(/^\*Never use:\*\s*(.*)$/))) out.exclude = m[1];
-    }
-    else if (label === 'Output Formatting') out.format = v;
-    else if ((m = label.match(/^Memory_\d+ \((.*)\)$/))) out.memories.push({ kind: m[1], text: v });
-    else if (label === 'Permitted Interactions') out.actions = subs.map(s => ({ act: s }));
-    else if (label === 'Negative Constraints') out.negatives = subs.map(s => ({ rule: s }));
-  }
-  return out;
-}
+  if (last) { S = last; renderAll(); }
+  renderSessionCast();
+  flash(`Imported ${files.length} soul(s) into Session`);
+};
+bLoadStarter.onclick = () => {
+  const s = ODSession.load();
+  const hasAny = Object.keys(s.souls || {}).length > 0;
+  if (hasAny && !confirm('Add starter cast (CORVO, ORLA, VANE, KIP) to the active session?')) return;
+  const starter = ODSession.loadStarterSession();
+  const first = Object.values(starter.souls)[0];
+  if (first) S = { ...blank(), ...first.data };
+  renderAll();
+  renderSessionCast();
+  flash('Loaded starter cast into Session');
+};
 
 // ---------------------------------------------------------------- form
-const $ = s => document.querySelector(s);
 function bindScalars() {
   document.querySelectorAll('[data-k]').forEach(el => {
     el.value = S[el.dataset.k] ?? '';
-    el.oninput = () => { S[el.dataset.k] = el.value; changed(); };
+    el.oninput = () => {
+      S[el.dataset.k] = el.value;
+      if (el.dataset.k === 'color' && /^#[0-9a-f]{6}$/i.test(el.value)) cPick.value = el.value;
+      changed();
+    };
+  });
+  cPick.value = /^#[0-9a-f]{6}$/i.test(S.color || '') ? S.color : '#c2410c';
+  cPick.oninput = () => { S.color = cPick.value; cHex.value = cPick.value; changed(); };
+  cSwatches.innerHTML = '';
+  (ODSession.DEFAULT_PALETTE || []).forEach(hex => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.title = hex;
+    b.style.cssText = `width:14px;height:14px;border-radius:50%;border:1px solid #555;background:${hex};cursor:pointer;padding:0;`;
+    b.onclick = () => { S.color = hex; cPick.value = hex; cHex.value = hex; changed(); };
+    cSwatches.appendChild(b);
   });
   syncStatus();
 }
@@ -247,7 +317,7 @@ nStatus.onkeydown = e => { if (e.key === 'ArrowUp' || e.key === 'ArrowDown') { e
 function renderList(name) {
   const box = document.querySelector(`[data-list="${name}"]`), def = LISTS[name];
   box.innerHTML = '';
-  S[name].forEach((row, i) => {
+  (S[name] || []).forEach((row, i) => {
     const item = document.createElement('div'); item.className = 'item';
     item.style.gridTemplateColumns = def.cols.map(c => c[2] || 'minmax(0, 1fr)').join(' ') + ' 22px';
     for (const [k, ph, , dl] of def.cols) {
@@ -270,7 +340,7 @@ function renderList(name) {
   };
   box.appendChild(add);
 }
-const renderAll = () => { bindScalars(); Object.keys(LISTS).forEach(renderList); changed(); };
+const renderAll = () => { bindScalars(); Object.keys(LISTS).forEach(renderList); changed(); renderSessionCast(); };
 
 document.querySelectorAll('.section.collapsible .sec-head').forEach(h => h.onclick = () => h.parentElement.classList.toggle('open'));
 
@@ -283,7 +353,7 @@ function changed() {
   const slots = [S.id, S.role, S.objective, S.origin, S.worldview, S.tone, S.include || S.exclude, S.format]
     .map(v => !!String(v).trim())
     .concat(Object.keys(LISTS).map(k => rows(k).length > 0));
-  const filled = slots.filter(Boolean).length + 1;               // base status always has a value
+  const filled = slots.filter(Boolean).length + 1;
   $('#sFill').innerHTML = `<b>${filled}</b>&nbsp;/ ${slots.length + 1} fields`;
   $('#sWords').innerHTML = `<b>${(md.match(/\S+/g) || []).length}</b>&nbsp;words`;
   persist();
@@ -291,23 +361,27 @@ function changed() {
 const fileName = () => (S.id.trim().replace(/[^\w.-]+/g, '_') || 'soul') + '.md';
 
 // ---------------------------------------------------------------- toolbar
-bNew.onclick = () => { if (confirm('Discard this soul and start a new one?')) { S = blank(); renderAll(); } };
+bNew.onclick = () => { if (confirm('Discard unsaved edits in the form and start a new soul?')) { S = blank(); renderAll(); } };
 bOpen.onclick = () => file.click();
 file.onchange = async () => {
   const f = file.files[0]; file.value = ''; if (!f) return;
-  S = fromMarkdown(await f.text()); renderAll();
+  const fallback = f.name.replace(/^soul_/i, '').replace(/\.[^.]+$/, '');
+  S = fromMarkdown(await f.text(), fallback); renderAll();
 };
 bExport.onclick = e => { e.stopPropagation(); mExport.classList.toggle('open'); };
 document.addEventListener('click', () => mExport.classList.remove('open'));
 mExport.onclick = async e => {
   const x = e.target.dataset.x; if (!x) return;
   const md = toMarkdown();
-  if (x === 'copy') { try { await navigator.clipboard.writeText(md); } catch {} }
+  if (x === 'copy') { try { await navigator.clipboard.writeText(md); flash('Copied markdown'); } catch {} }
   if (x === 'md') {
     const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([md], { type: 'text/markdown' }));
     a.download = fileName(); a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   }
 };
+document.addEventListener('keydown', e => {
+  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') { e.preventDefault(); bSaveSess.click(); }
+});
 
 renderAll();
 </script>

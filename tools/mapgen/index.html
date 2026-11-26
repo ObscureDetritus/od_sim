@@ -13,6 +13,22 @@
 #work canvas { display: block; }
 #text { margin: 0; padding: 6px 8px; background: var(--well); border: 1px solid var(--well-border); border-radius: 2px;
   font: 11px/1 var(--mono); color: var(--ink); white-space: pre; overflow-x: auto; user-select: text; }
+.obj-list { display: flex; flex-direction: column; gap: 3px; max-height: 180px; overflow-y: auto; }
+.obj-item { display: grid; grid-template-columns: 20px 1fr auto 20px; gap: 6px; align-items: center;
+  padding: 3px 5px; background: var(--well); border: 1px solid var(--edge); border-radius: 2px; cursor: pointer; }
+.obj-item:hover { background: var(--well-hover); }
+.obj-item.sel { border-color: var(--accent); background: #161616; }
+.obj-glyph { text-align: center; font-weight: 700; color: #ffff55; }
+.obj-glyph.pick { color: #55ffff; }
+.obj-meta { font-size: 10px; color: var(--text-dim); white-space: nowrap; }
+.obj-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--value); }
+.obj-del { background: transparent; border: 0; color: var(--text-dim); cursor: pointer; padding: 0; width: 18px; height: 18px; display: inline-flex; align-items: center; justify-content: center; }
+.obj-del:hover { color: var(--error); }
+.flags-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.flag-item { display: inline-flex; align-items: center; gap: 5px; color: var(--text-dim); font-size: 11px; }
+.hint { font-size: 10.5px; color: var(--text-dim); line-height: 1.35; }
+.preset-bar { display: flex; flex-wrap: wrap; gap: 4px; }
+.preset-bar button { font-size: 10.5px; height: 20px; padding: 0 6px; }
 </style>
 </head>
 <body>
@@ -26,10 +42,13 @@
   <symbol id="i-chev" viewBox="0 0 12 12"><path d="M4.5 3L7.5 6 4.5 9"/></symbol>
   <symbol id="i-minus" viewBox="0 0 12 12"><path d="M3 6h6"/></symbol>
   <symbol id="i-plus" viewBox="0 0 12 12"><path d="M3 6h6 M6 3v6"/></symbol>
-  <symbol id="i-pencil" viewBox="0 0 16 16"><path d="M10.5 2.5l3 3-8 8H2.5v-3z M9 4l3 3"/></symbol>
+  <symbol id="i-pencil" viewBox="0 0 16 16"><path d="M10.5 2.5l3 3-8 8H2.5v3h0v-3z M9 4l3 3"/></symbol>
   <symbol id="i-rect" viewBox="0 0 16 16"><rect x="2.5" y="3.5" width="11" height="9"/></symbol>
   <symbol id="i-room" viewBox="0 0 16 16"><rect x="2.5" y="3.5" width="11" height="9"/><rect x="5" y="6" width="6" height="4"/></symbol>
   <symbol id="i-fill" viewBox="0 0 16 16"><path d="M3 8.5L8 3.5l5 5-5 5z M12.5 11.5c0 1 .7 1.6 1 2"/></symbol>
+  <symbol id="i-obj" viewBox="0 0 16 16"><path d="M8 2L13.5 5v6L8 14 2.5 11V5z M8 8v6 M8 8L13.5 5 M8 8L2.5 5"/></symbol>
+  <symbol id="i-save" viewBox="0 0 16 16"><path d="M3 2h8l2 2v10H3z M5.5 2v4h5V2 M5 14v-4h6v4"/></symbol>
+  <symbol id="i-x" viewBox="0 0 12 12"><path d="M3.5 3.5l5 5 M8.5 3.5l-5 5"/></symbol>
 </svg>
 
 <div id="app">
@@ -46,11 +65,15 @@
     </div>
     <div class="seg" id="brush"></div>
     <div class="r">
+      <button class="ui-btn" id="bLoadSess" title="Load map from active Session">Load Session</button>
+      <button class="ui-btn" id="bSaveSess" title="Save this map + objects to active Session for Play"><svg class="i s"><use href="#i-save"/></svg>Save Session</button>
+      <a class="ui-btn" href="../play/index.html" title="Open 3D Simulation" style="text-decoration:none">Play →</a>
+      <div class="vsep"></div>
       <button class="ui-btn primary" id="bExport"><svg class="i"><use href="#i-down"/></svg>Export</button>
       <div class="menu" id="mExport">
         <button data-x="copy">Copy text</button>
         <button data-x="txt">Download .txt</button>
-        <button data-x="json">Download .json</button>
+        <button data-x="json">Download .json (with objects)</button>
       </div>
     </div>
   </div>
@@ -66,20 +89,58 @@
             <button data-t="rect" title="Rectangle (R) · fills with the brush"><svg class="i"><use href="#i-rect"/></svg></button>
             <button data-t="room" title="Room (M) · wall outline with floor inside"><svg class="i"><use href="#i-room"/></svg></button>
             <button data-t="fill" title="Fill (F)"><svg class="i"><use href="#i-fill"/></svg></button>
+            <button data-t="object" title="Abstract Object (O) · click cell to place/select, right-click removes"><svg class="i"><use href="#i-obj"/></svg></button>
           </div>
         </div>
       </div>
 
-      <div class="section">
-        <div class="sec-head">Grid</div>
+      <div class="section collapsible open" id="secObj">
+        <div class="sec-head fold"><svg class="i s chev"><use href="#i-chev"/></svg>Abstract Object <span id="objModeTag" style="margin-left:auto;color:var(--text-dim);font-weight:400;font-size:10.5px;">brush</span></div>
         <div class="sec-body">
-          <div class="row slider"><label title="Columns">Width</label><input type="range" id="rW" min="4" max="64"><input class="ui-field num" id="nW"></div>
-          <div class="row slider"><label title="Rows">Height</label><input type="range" id="rH" min="4" max="64"><input class="ui-field num" id="nH"></div>
-          <div class="row"><label title="Show cell lines (G)">Lines</label><div><button class="switch" id="swGrid"></button></div></div>
+          <div class="hint">Select the cube tool (O) and click any cell to place a custom named object. Right-click a cell to remove its object.</div>
+          <div class="preset-bar">
+            <button class="ui-btn" data-op="table|T|0|0|1">table</button>
+            <button class="ui-btn" data-op="book|B|1|1|1">book</button>
+            <button class="ui-btn" data-op="chair|h|1|0|1">chair</button>
+            <button class="ui-btn" data-op="clock|C|0|0|1">clock</button>
+            <button class="ui-btn" data-op="tape|S|1|1|1">tape</button>
+            <button class="ui-btn" data-op="blank|?|1|0|1">blank</button>
+          </div>
+          <div class="row"><label title="Custom object name (e.g. table, book, lamp)">Name</label><input class="ui-field" id="oName" placeholder="table, book, bell..."></div>
+          <div class="row"><label title="1-2 char symbol shown on grid & 3D">Glyph</label><input class="ui-field" id="oGlyph" maxlength="2" placeholder="auto"></div>
+          <div class="row"><label title="Short note agents see when inspecting">Info</label><input class="ui-field" id="oDesc" placeholder="optional description..."></div>
+          <div class="flags-row">
+            <span class="flag-item"><button class="switch" id="swWalk"></button> Walkable</span>
+            <span class="flag-item"><button class="switch" id="swPick"></button> Pickable</span>
+            <span class="flag-item"><button class="switch" id="swInter"></button> Interactive</span>
+          </div>
+          <div style="display:flex;gap:6px;margin-top:2px;">
+            <button class="ui-btn" id="bObjUse" style="flex:1;justify-content:center">Use Object Tool (O)</button>
+            <button class="ui-btn" id="bObjClearSel" style="display:none">New Brush</button>
+          </div>
+          <div class="obj-list" id="objList"></div>
         </div>
       </div>
 
-      <div class="section collapsible open" id="secText">
+      <div class="section">
+        <div class="sec-head">Grid &amp; Floor</div>
+        <div class="sec-body">
+          <div class="row slider"><label title="Columns (wheel over input or Alt+Wheel on canvas)">Width</label><input type="range" id="rW" min="4" max="64"><input class="ui-field num" id="nW"></div>
+          <div class="row slider"><label title="Rows (wheel over input or Alt+Wheel on canvas)">Height</label><input type="range" id="rH" min="4" max="64"><input class="ui-field num" id="nH"></div>
+          <div class="row"><label title="Shift+Mouse Wheel on canvas to switch floor">Floor</label>
+            <div style="display:flex;align-items:center;gap:4px;">
+              <button class="ui-btn" id="bFloorDn" title="Floor down (Shift+Wheel)">−</button>
+              <span id="lblFloor" style="min-width:44px;text-align:center;color:var(--value);font-weight:600;">F0</span>
+              <button class="ui-btn" id="bFloorUp" title="Floor up (Shift+Wheel)">+</button>
+              <span style="font-size:10px;color:var(--text-dim);margin-left:4px;">Shift+Wheel</span>
+            </div>
+          </div>
+          <div class="row"><label title="Show cell lines (G)">Lines</label><div><button class="switch" id="swGrid"></button></div></div>
+          <div class="hint">Wheel: zoom grid · Shift+Wheel: change floor · Alt+Wheel: resize grid · Space+drag: pan</div>
+        </div>
+      </div>
+
+      <div class="section collapsible" id="secText">
         <div class="sec-head fold"><svg class="i s chev"><use href="#i-chev"/></svg>Text</div>
         <div class="sec-body">
           <div class="row"><label title="Print every glyph twice so cells read square">Double</label><div><button class="switch" id="swDouble"></button></div></div>
@@ -92,7 +153,7 @@
   <div id="status">
     <div class="cell"><i class="led" id="led"></i><span id="sPos">–</span></div>
     <div class="cell" id="sCounts"></div>
-    <div class="cell grow"></div>
+    <div class="cell grow" id="sMsg" style="color:var(--value)"></div>
     <div class="cell" id="sSize"></div>
     <div class="cell zoom">
       <button id="zOut" title="Zoom out"><svg class="i s"><use href="#i-minus"/></svg></button>
@@ -102,14 +163,13 @@
   </div>
 </div>
 
+<script src="../../shared/session.js"></script>
 <script>
 const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
 // ---------------------------------------------------------------- model
 const TYPES = ['empty', 'wall', 'floor', 'door', 'corridor', 'stairs'];
 const LABEL = { empty: 'Empty', wall: 'Wall', floor: 'Floor', door: 'Door', corridor: 'Corridor', stairs: 'Stairs' };
-const CANON = { empty: ' ', wall: '#', floor: '.', door: '+', corridor: ':', stairs: '%' };   // glyph-independent save format
-// The PC Rogue look (1985, CGA colours): brown double-line walls, ╬ doors, green · floor, grey ▒ corridors,
-// stairs as a black ≡ on a green cell.
+const CANON = { empty: ' ', wall: '#', floor: '.', door: '+', corridor: ':', stairs: '%' };
 const G = { empty: ' ', wall: '╬', floor: '·', door: '╬', corridor: '▒', stairs: '≡' };
 const LOOK = { paper: '#000000', ink: '#aaaaaa', void: '#3a3a3a',
   fg: { empty: '#000000', wall: '#aa5500', floor: '#55ff55', door: '#aa5500', corridor: '#aaaaaa', stairs: '#000000' },
@@ -118,19 +178,49 @@ const KEY = 'od.mapeditor.v3';
 
 let S = {
   w: 16, h: 16, cells: new Array(256).fill(0),
+  floors: null, activeFloor: 0,
+  objects: [],
   brush: 1, tool: 'pencil', grid: true, double: true, zoom: 1,
 };
 try {
   const saved = JSON.parse(localStorage.getItem(KEY)) || JSON.parse(localStorage.getItem('od.mapeditor.v2'));
-  if (saved && saved.cells) S = { ...S, w: saved.w, h: saved.h, cells: saved.cells, brush: saved.brush ?? 1,
-    tool: saved.tool ?? 'pencil', grid: saved.grid ?? true, double: saved.double ?? true, zoom: saved.zoom ?? 1 };
+  if (saved && saved.cells) S = { ...S, w: saved.w, h: saved.h, cells: saved.cells,
+    floors: saved.floors && typeof saved.floors === 'object' ? saved.floors : null,
+    activeFloor: Number(saved.activeFloor || 0) | 0,
+    objects: Array.isArray(saved.objects) ? saved.objects : [],
+    brush: saved.brush ?? 1, tool: saved.tool ?? 'pencil', grid: saved.grid ?? true, double: saved.double ?? true, zoom: saved.zoom ?? 1 };
 } catch {}
-const persist = () => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch {} };
+if (!S.floors) S.floors = { [String(S.activeFloor)]: S.cells };
+if (!S.floors[String(S.activeFloor)]) S.floors[String(S.activeFloor)] = S.cells;
+S.cells = S.floors[String(S.activeFloor)];
+const persist = () => { S.floors[String(S.activeFloor)] = S.cells; try { localStorage.setItem(KEY, JSON.stringify(S)); } catch {} };
+
+let objBrush = { name: 'table', glyph: 'T', description: '', walkable: false, pickable: false, interactive: true };
+let selectedObjId = null;
 
 const at = (x, y) => (x < 0 || y < 0 || x >= S.w || y >= S.h) ? 0 : S.cells[y * S.w + x];
+const objAt = (x, y) => S.objects.find(o => (o.floor | 0) === (S.activeFloor | 0) && o.x === x && o.y === y) || null;
+
+function setFloor(f) {
+  f = Math.max(-3, Math.min(5, f | 0));
+  if (f === S.activeFloor) return;
+  S.floors[String(S.activeFloor)] = S.cells;
+  S.activeFloor = f;
+  if (!S.floors[String(f)] || S.floors[String(f)].length !== S.w * S.h) {
+    S.floors[String(f)] = new Array(S.w * S.h).fill(0);
+  }
+  S.cells = S.floors[String(f)];
+  selectedObjId = null;
+  syncFloorUI();
+  syncObjPanel();
+  changed();
+  flash(`Switched to Floor F${f}`);
+}
+function syncFloorUI() {
+  if (typeof lblFloor !== 'undefined') lblFloor.textContent = `F${S.activeFloor}`;
+}
 
 // Walls: CP437 double lines that join to neighbouring walls and doors.
-// Walls with no floor, door or corridor around them are buried rock and draw as empty.
 const BOX = { 0: '■', 1: '║', 4: '║', 5: '║', 2: '═', 8: '═', 10: '═', 6: '╔', 12: '╗', 3: '╚', 9: '╝',
               7: '╠', 13: '╣', 14: '╦', 11: '╩', 15: '╬' };
 function exposed(x, y) {
@@ -141,8 +231,9 @@ const joins = (x, y) => (at(x, y) === 1 && exposed(x, y)) || at(x, y) === 3;
 function wallMask(x, y) {
   return (joins(x, y - 1) ? 1 : 0) | (joins(x + 1, y) ? 2 : 0) | (joins(x, y + 1) ? 4 : 0) | (joins(x - 1, y) ? 8 : 0);
 }
-// -> [glyph, tile type used for colour, connects east (for double-width text)]
 function cellLook(x, y) {
+  const o = objAt(x, y);
+  if (o) return [(o.glyph || o.name[0] || '?')[0], 'object', false];
   const t = TYPES[at(x, y)];
   if (t === 'empty') return [' ', 'empty', false];
   if (t === 'wall') {
@@ -156,30 +247,36 @@ function cellLook(x, y) {
 
 // ---------------------------------------------------------------- undo
 const undo = [], redo = [];
-function checkpoint() { undo.push(S.cells.slice()); if (undo.length > 200) undo.shift(); redo.length = 0; syncUndo(); }
-function restore(from, to) { if (!from.length) return; to.push(S.cells.slice()); S.cells = from.pop(); changed(); syncUndo(); }
+const snap = () => ({ cells: S.cells.slice(), objects: JSON.parse(JSON.stringify(S.objects)) });
+function checkpoint() { undo.push(snap()); if (undo.length > 200) undo.shift(); redo.length = 0; syncUndo(); }
+function restore(from, to) {
+  if (!from.length) return;
+  to.push(snap());
+  const st = from.pop();
+  S.cells = st.cells; S.objects = st.objects;
+  if (selectedObjId && !S.objects.some(o => o.id === selectedObjId)) selectedObjId = null;
+  syncObjPanel(); changed(); syncUndo();
+}
 function syncUndo() { bUndo.disabled = !undo.length; bRedo.disabled = !redo.length; }
 
 // ---------------------------------------------------------------- tile drawing
-// Tiles are drawn as exact shapes on the pixel grid (like a bitmap tileset), so every tile sits dead
-// centre in its cell whatever fonts are installed. The text export still uses the CP437 characters.
 const FONT = getComputedStyle(document.documentElement).getPropertyValue('--mono');
 function drawTile(c, t, mask, x, y, w, h) {
   if (t === 'empty') return;
   const col = LOOK.fg[t], r = (v) => Math.round(v);
-  if (t === 'stairs') {                                   // ≡ : three black bars on a green cell
+  if (t === 'stairs') {
     c.fillStyle = LOOK.bg.stairs; c.fillRect(x, y, w, h);
     const bw = r(w * .6), bh = Math.max(1, r(h * .1)), gap = Math.max(1, r(h * .12));
     const bx = x + r((w - bw) / 2), by = y + r((h - (3 * bh + 2 * gap)) / 2);
     c.fillStyle = col; for (let i = 0; i < 3; i++) c.fillRect(bx, by + i * (bh + gap), bw, bh);
     return;
   }
-  if (t === 'floor') {                                    // · : one centred square dot
+  if (t === 'floor') {
     const d = Math.max(1, r(Math.min(w, h) * .16));
     c.fillStyle = col; c.fillRect(x + r((w - d) / 2), y + r((h - d) / 2), d, d);
     return;
   }
-  if (t === 'corridor') {                                 // ▒ : 50% checker dither
+  if (t === 'corridor') {
     const n = Math.min(w, h) >= 24 ? 8 : 4;
     c.fillStyle = col;
     for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) if ((i + j) % 2 === 0) {
@@ -188,13 +285,11 @@ function drawTile(c, t, mask, x, y, w, h) {
     }
     return;
   }
-  // wall / door: a double line drawn as a hollow "pipe" from the centre to each connected edge.
-  // Doors are a full cross (╬).
   const m = t === 'door' ? 15 : mask, cx = x + w / 2, cy = y + h / 2, s = Math.min(w, h);
   const lw = Math.max(1, r(s / 9)), gap = Math.max(2, r(s * .3));
   const path = () => {
     c.beginPath();
-    if (m === 0) { c.moveTo(cx - .01, cy); c.lineTo(cx + .01, cy); }   // lone pillar
+    if (m === 0) { c.moveTo(cx - .01, cy); c.lineTo(cx + .01, cy); }
     if (m & 1) { c.moveTo(cx, cy); c.lineTo(cx, y - 1); }
     if (m & 2) { c.moveTo(cx, cy); c.lineTo(x + w + 1, cy); }
     if (m & 4) { c.moveTo(cx, cy); c.lineTo(cx, y + h + 1); }
@@ -214,7 +309,6 @@ let panX = 0, panY = 0, spaceDown = false;
 const ZMIN = .25, ZMAX = 8;
 const VOID = 'VOID';
 
-// The canvas fills the whole work area. The map sits centred on the same grid; every cell outside it spells VOID.
 function layout() {
   CW = work.clientWidth; CH = work.clientHeight;
   const dpr = devicePixelRatio || 1;
@@ -229,7 +323,6 @@ function place() {
   ox = Math.round((CW - S.w * cell) / 2 + panX); oy = Math.round((CH - S.h * cell) / 2 + panY);
   draw();
 }
-// Zoom keeping the map point under (mx, my) fixed on screen.
 function zoomTo(z, mx = CW / 2, my = CH / 2) {
   z = Math.min(ZMAX, Math.max(ZMIN, z));
   const wx = (mx - ox) / cell, wy = (my - oy) / cell, c2 = Math.max(2, fitCell() * z);
@@ -239,7 +332,7 @@ function zoomTo(z, mx = CW / 2, my = CH / 2) {
 function resetView() { panX = panY = 0; zoomTo(1); panX = panY = 0; place(); }
 
 function draw() {
-  ctx.clearRect(0, 0, CW, CH);                                   // VOID area lets the page background through
+  ctx.clearRect(0, 0, CW, CH);
   ctx.fillStyle = LOOK.paper; ctx.fillRect(ox, oy, S.w * cell, S.h * cell);
   const x0 = -Math.ceil(ox / cell), y0 = -Math.ceil(oy / cell);
   const x1 = Math.ceil((CW - ox) / cell), y1 = Math.ceil((CH - oy) / cell);
@@ -251,12 +344,46 @@ function draw() {
     ctx.fillText(VOID[((x % 4) + 4) % 4], ox + (x + .5) * cell, oy + (y + .55) * cell);
   }
 
-  const gx = i => Math.round(ox + i * cell), gy = j => Math.round(oy + j * cell);   // snapped cell edges
+  const gx = i => Math.round(ox + i * cell), gy = j => Math.round(oy + j * cell);
   for (let y = 0; y < S.h; y++) for (let x = 0; x < S.w; x++) {
     const t = TYPES[at(x, y)];
     if (t === 'empty' || (t === 'wall' && !exposed(x, y))) continue;
     drawTile(ctx, t, t === 'wall' ? wallMask(x, y) : 15, gx(x), gy(y), gx(x + 1) - gx(x), gy(y + 1) - gy(y));
   }
+
+  // Subtle ghost of floor below for vertical alignment
+  const below = S.floors[String(S.activeFloor - 1)];
+  if (below && below.length === S.w * S.h) {
+    ctx.fillStyle = 'rgba(255,255,255,.04)';
+    for (let y = 0; y < S.h; y++) for (let x = 0; x < S.w; x++) {
+      if (below[y * S.w + x] > 0) ctx.fillRect(gx(x), gy(y), gx(x + 1) - gx(x), gy(y + 1) - gy(y));
+    }
+  }
+
+  // Draw Abstract Objects on active floor
+  S.objects.forEach(o => {
+    if ((o.floor | 0) !== (S.activeFloor | 0)) return;
+    if (o.x < 0 || o.y < 0 || o.x >= S.w || o.y >= S.h) return;
+    const x = gx(o.x), y = gy(o.y), w = gx(o.x + 1) - x, h = gy(o.y + 1) - y;
+    const isSel = o.id === selectedObjId;
+    const color = o.pickable ? '#55ffff' : (!o.walkable ? '#ffff55' : '#e6e6e6');
+    ctx.fillStyle = isSel ? 'rgba(255,255,255,.22)' : 'rgba(0,0,0,.78)';
+    ctx.fillRect(x + 2, y + 2, Math.max(2, w - 4), Math.max(2, h - 4));
+    ctx.strokeStyle = isSel ? '#ffffff' : color;
+    ctx.lineWidth = isSel ? 2 : 1;
+    if (o.walkable) ctx.setLineDash([2, 2]);
+    ctx.strokeRect(x + 2.5, y + 2.5, Math.max(1, w - 5), Math.max(1, h - 5));
+    ctx.setLineDash([]);
+    ctx.fillStyle = color;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.font = `bold ${Math.max(8, Math.round(cell * .48))}px ${FONT}`;
+    ctx.fillText((o.glyph || o.name[0] || '?').toUpperCase(), x + w / 2, y + h / 2);
+    if (cell >= 30) {
+      ctx.font = `${Math.max(8, Math.round(cell * .22))}px ${FONT}`;
+      ctx.fillStyle = '#cfcfcf';
+      ctx.fillText(o.name.slice(0, 10), x + w / 2, y + h + 6);
+    }
+  });
 
   if (S.grid && cell >= 5) {
     ctx.strokeStyle = 'rgba(255,255,255,.07)'; ctx.lineWidth = 1; ctx.beginPath();
@@ -283,7 +410,7 @@ function cellAt(e) {
   return (x >= 0 && y >= 0 && x < S.w && y < S.h) ? [x, y] : null;
 }
 function set(x, y, v) { if (x >= 0 && y >= 0 && x < S.w && y < S.h) S.cells[y * S.w + x] = v; }
-function line(a, b, v) {                       // Bresenham so fast drags leave no gaps
+function line(a, b, v) {
   let [x0, y0] = a; const [x1, y1] = b, dx = Math.abs(x1 - x0), dy = -Math.abs(y1 - y0);
   const sx = x0 < x1 ? 1 : -1, sy = y0 < y1 ? 1 : -1; let err = dx + dy;
   for (;;) { set(x0, y0, v); if (x0 === x1 && y0 === y1) break; const e2 = 2 * err;
@@ -300,10 +427,15 @@ function flood(x, y, v) {
 cv.addEventListener('contextmenu', e => e.preventDefault());
 cv.addEventListener('wheel', e => {
   e.preventDefault();
-  if (e.ctrlKey || e.metaKey) {
+  if (e.shiftKey) {
+    setFloor(S.activeFloor + (e.deltaY < 0 ? 1 : -1));
+  } else if (e.altKey) {
+    const step = e.deltaY < 0 ? 1 : -1;
+    resize(S.w + step, S.h + step);
+  } else {
     const r = cv.getBoundingClientRect();
-    zoomTo(S.zoom * Math.exp(-e.deltaY * .01), e.clientX - r.left, e.clientY - r.top);
-  } else { panX -= e.deltaX; panY -= e.deltaY; place(); }
+    zoomTo(S.zoom * Math.exp(-e.deltaY * .0025), e.clientX - r.left, e.clientY - r.top);
+  }
 }, { passive: false });
 cv.addEventListener('pointerdown', e => {
   if (spaceDown || e.button === 1) {
@@ -311,6 +443,40 @@ cv.addEventListener('pointerdown', e => {
     drag = { pan: true, sx: e.clientX, sy: e.clientY, px: panX, py: panY }; cv.style.cursor = 'grabbing'; return;
   }
   const c = cellAt(e); if (!c) return;
+  if (S.tool === 'object') {
+    const existing = objAt(c[0], c[1]);
+    if (e.button === 2) {
+      if (existing) {
+        checkpoint();
+        S.objects = S.objects.filter(o => o.id !== existing.id);
+        if (selectedObjId === existing.id) selectedObjId = null;
+        syncObjPanel(); changed();
+      }
+      return;
+    }
+    if (existing) {
+      selectedObjId = existing.id;
+      syncObjPanel(); draw();
+      return;
+    }
+    checkpoint();
+    if (at(c[0], c[1]) === 0) set(c[0], c[1], 2); // place floor under object if cell was empty
+    const name = (objBrush.name || 'object').trim() || 'object';
+    const glyph = (objBrush.glyph || name[0] || '?').trim().slice(0, 2).toUpperCase();
+    const created = {
+      id: ODSession.rid('obj'),
+      x: c[0], y: c[1], floor: S.activeFloor, name, glyph,
+      walkable: !!objBrush.walkable,
+      pickable: !!objBrush.pickable,
+      interactive: !!objBrush.interactive,
+      description: (objBrush.description || '').trim()
+    };
+    S.objects.push(created);
+    selectedObjId = created.id;
+    syncObjPanel(); changed();
+    return;
+  }
+
   cv.setPointerCapture(e.pointerId);
   const v = e.button === 2 ? 0 : S.brush;
   checkpoint();
@@ -321,7 +487,11 @@ cv.addEventListener('pointerdown', e => {
 cv.addEventListener('pointermove', e => {
   if (drag && drag.pan) { panX = drag.px + e.clientX - drag.sx; panY = drag.py + e.clientY - drag.sy; place(); return; }
   const c = cellAt(e);
-  hover = c; sPos.textContent = c ? `${c[0]}, ${c[1]}` : '–';
+  hover = c;
+  if (c) {
+    const o = objAt(c[0], c[1]);
+    sPos.textContent = o ? `${c[0]}, ${c[1]} · ${o.name}` : `${c[0]}, ${c[1]}`;
+  } else sPos.textContent = '–';
   if (drag && c) {
     drag.cur = c;
     if (S.tool === 'pencil') { line(drag.last, c, drag.v); drag.last = c; changed(); return; }
@@ -342,7 +512,7 @@ cv.addEventListener('pointerup', () => {
 });
 cv.addEventListener('pointerleave', () => { hover = null; sPos.textContent = '–'; draw(); });
 
-// ---------------------------------------------------------------- text export
+// ---------------------------------------------------------------- text & json export
 function asText(double = S.double) {
   const rows = [];
   for (let y = 0; y < S.h; y++) {
@@ -350,8 +520,8 @@ function asText(double = S.double) {
     for (let x = 0; x < S.w; x++) {
       const [g, t, east] = cellLook(x, y);
       if (!double) r += g;
-      else if (t === 'wall' || t === 'door') r += g + (east ? '═' : ' ');   // keep lines continuous
-      else if (t === 'empty' || t === 'floor') r += g + ' ';
+      else if (t === 'wall' || t === 'door') r += g + (east ? '═' : ' ');
+      else if (t === 'empty' || t === 'floor' || t === 'object') r += g + ' ';
       else r += g + g;
     }
     rows.push(r);
@@ -361,18 +531,18 @@ function asText(double = S.double) {
 function asJSON() {
   const rows = [];
   for (let y = 0; y < S.h; y++) { let r = ''; for (let x = 0; x < S.w; x++) r += CANON[TYPES[at(x, y)]]; rows.push(r); }
-  return JSON.stringify({ width: S.w, height: S.h, legend: CANON, tiles: rows }, null, 1);
+  return JSON.stringify({ width: S.w, height: S.h, legend: CANON, tiles: rows, objects: S.objects }, null, 1);
 }
 function download(name, text) {
   const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], { type: 'text/plain' }));
   a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
 function importText(txt) {
-  let rows, lookup = {}, json = false;
-  try { rows = JSON.parse(txt).tiles; json = true; } catch { rows = txt.replace(/\r/g, '').split('\n').filter(r => r.length); }
-  if (!json) {                                  // text: read it in the current glyphs first, canonical chars as fallback
+  let rows, lookup = {}, json = false, parsed = null;
+  try { parsed = JSON.parse(txt); rows = parsed.tiles; json = true; } catch { rows = txt.replace(/\r/g, '').split('\n').filter(r => r.length); }
+  if (!json) {
     for (const ch of Object.values(BOX)) lookup[ch] = 1;
-    for (const t of TYPES) if (t !== 'wall') lookup[G[t]] = TYPES.indexOf(t);   // ╬ reads as a door
+    for (const t of TYPES) if (t !== 'wall') lookup[G[t]] = TYPES.indexOf(t);
   }
   for (const [t, ch] of Object.entries(CANON)) lookup[ch] ??= TYPES.indexOf(t);
   const chars = rows.map(r => [...r]);
@@ -384,7 +554,83 @@ function importText(txt) {
   S.h = Math.min(64, grid.length); S.w = Math.min(64, Math.max(...grid.map(r => r.length)));
   S.cells = new Array(S.w * S.h).fill(0);
   grid.slice(0, S.h).forEach((r, y) => r.slice(0, S.w).forEach((c, x) => set(x, y, lookup[c] ?? 0)));
-  syncControls(); layout(); changed();
+  S.objects = (json && Array.isArray(parsed.objects)) ? ODSession.normalizeMap(parsed).objects : [];
+  selectedObjId = null;
+  syncControls(); syncObjPanel(); layout(); changed();
+}
+
+// ---------------------------------------------------------------- abstract object panel
+function activeObjTarget() {
+  return selectedObjId ? S.objects.find(o => o.id === selectedObjId) || null : null;
+}
+function syncObjPanel() {
+  const target = activeObjTarget();
+  const src = target || objBrush;
+  objModeTag.textContent = target ? `editing (${target.x},${target.y})` : 'brush';
+  bObjClearSel.style.display = target ? '' : 'none';
+  oName.value = src.name || '';
+  oGlyph.value = src.glyph || '';
+  oDesc.value = src.description || '';
+  swWalk.classList.toggle('on', !!src.walkable);
+  swPick.classList.toggle('on', !!src.pickable);
+  swInter.classList.toggle('on', !!src.interactive);
+  renderObjList();
+}
+function mutateObj(fn) {
+  const target = activeObjTarget();
+  if (target) { fn(target); changed(); }
+  else { fn(objBrush); }
+  syncObjPanel();
+}
+oName.oninput = () => mutateObj(o => {
+  o.name = oName.value;
+  if (!oGlyph.value.trim() && o.name.trim()) o.glyph = o.name.trim()[0].toUpperCase();
+});
+oGlyph.oninput = () => mutateObj(o => { o.glyph = oGlyph.value.toUpperCase(); });
+oDesc.oninput = () => mutateObj(o => { o.description = oDesc.value; });
+swWalk.onclick = () => mutateObj(o => { o.walkable = !o.walkable; });
+swPick.onclick = () => mutateObj(o => { o.pickable = !o.pickable; });
+swInter.onclick = () => mutateObj(o => { o.interactive = !o.interactive; });
+bObjUse.onclick = () => { S.tool = 'object'; buildTools(); persist(); };
+bObjClearSel.onclick = () => { selectedObjId = null; syncObjPanel(); draw(); };
+
+document.querySelectorAll('.preset-bar button').forEach(b => {
+  b.onclick = () => {
+    const [name, glyph, w, p, i] = b.dataset.op.split('|');
+    selectedObjId = null;
+    objBrush = { name: name === 'blank' ? '' : name, glyph, description: '', walkable: w === '1', pickable: p === '1', interactive: i === '1' };
+    S.tool = 'object';
+    buildTools(); syncObjPanel(); draw();
+    if (name === 'blank') oName.focus();
+  };
+});
+
+function renderObjList() {
+  objList.innerHTML = '';
+  if (!S.objects.length) {
+    objList.innerHTML = '<div class="hint" style="padding:4px 0;">No objects placed yet.</div>';
+    return;
+  }
+  S.objects.forEach(o => {
+    const el = document.createElement('div');
+    el.className = 'obj-item' + (o.id === selectedObjId ? ' sel' : '');
+    const flags = [o.walkable ? 'W' : 'S', o.pickable ? 'P' : '', o.interactive ? 'I' : ''].filter(Boolean).join('');
+    el.innerHTML = `<span class="obj-glyph ${o.pickable ? 'pick' : ''}">${o.glyph || '?'}</span>
+      <span class="obj-name">${o.name}</span>
+      <span class="obj-meta">(${o.x},${o.y}) ${flags}</span>
+      <button class="obj-del" title="Remove"><svg class="i s"><use href="#i-x"/></svg></button>`;
+    el.onclick = (e) => {
+      if (e.target.closest('.obj-del')) return;
+      selectedObjId = o.id; S.tool = 'object'; buildTools(); syncObjPanel(); draw();
+    };
+    el.querySelector('.obj-del').onclick = () => {
+      checkpoint();
+      S.objects = S.objects.filter(x => x.id !== o.id);
+      if (selectedObjId === o.id) selectedObjId = null;
+      syncObjPanel(); changed();
+    };
+    objList.appendChild(el);
+  });
 }
 
 // ---------------------------------------------------------------- side panel
@@ -401,18 +647,18 @@ function glyphCanvas(types, s) {
 function buildBrush() {
   const box = document.getElementById('brush'); box.innerHTML = '';
   TYPES.forEach((t, i) => {
-    const b = document.createElement('button'); b.className = i === S.brush ? 'on' : ''; b.title = `${LABEL[t]} (${i + 1})`;
+    const b = document.createElement('button'); b.className = (i === S.brush && S.tool !== 'object') ? 'on' : ''; b.title = `${LABEL[t]} (${i + 1})`;
     const c = glyphCanvas([t], 12); c.className = 'chipglyph';
     const l = document.createElement('span'); l.className = 'lbl'; l.textContent = LABEL[t];
     b.append(c, l);
-    b.onclick = () => { S.brush = i; buildBrush(); persist(); };
+    b.onclick = () => { S.brush = i; if (S.tool === 'object') S.tool = 'pencil'; buildBrush(); buildTools(); persist(); };
     box.appendChild(b);
   });
 }
 function buildTools() {
   document.querySelectorAll('#tools button').forEach(b => {
     b.classList.toggle('on', b.dataset.t === S.tool);
-    b.onclick = () => { S.tool = b.dataset.t; buildTools(); persist(); };
+    b.onclick = () => { S.tool = b.dataset.t; buildTools(); buildBrush(); persist(); };
   });
 }
 function bindSwitch(id, key, after) {
@@ -425,9 +671,16 @@ function resize(w, h) {
   w = Math.max(4, Math.min(64, w | 0)); h = Math.max(4, Math.min(64, h | 0));
   if (w === S.w && h === S.h) return;
   checkpoint();
-  const next = new Array(w * h).fill(0);
-  for (let y = 0; y < Math.min(h, S.h); y++) for (let x = 0; x < Math.min(w, S.w); x++) next[y * w + x] = at(x, y);
-  S.w = w; S.h = h; S.cells = next; syncControls(); layout(); changed();
+  S.floors[String(S.activeFloor)] = S.cells;
+  for (const fk of Object.keys(S.floors)) {
+    const old = S.floors[fk];
+    const next = new Array(w * h).fill(0);
+    for (let y = 0; y < Math.min(h, S.h); y++) for (let x = 0; x < Math.min(w, S.w); x++) next[y * w + x] = old[y * S.w + x] || 0;
+    S.floors[fk] = next;
+  }
+  S.w = w; S.h = h; S.cells = S.floors[String(S.activeFloor)];
+  S.objects = S.objects.filter(o => o.x < w && o.y < h);
+  syncControls(); syncObjPanel(); layout(); changed();
 }
 function syncControls() {
   for (const [r, n, k] of [[rW, nW, 'w'], [rH, nH, 'h']]) {
@@ -438,23 +691,48 @@ for (const [r, n, k] of [[rW, nW, 'w'], [rH, nH, 'h']]) {
   r.oninput = () => resize(k === 'w' ? +r.value : S.w, k === 'h' ? +r.value : S.h);
   r.ondblclick = () => resize(k === 'w' ? 16 : S.w, k === 'h' ? 16 : S.h);
   n.onchange = () => resize(k === 'w' ? +n.value : S.w, k === 'h' ? +n.value : S.h);
+  n.onwheel = e => { e.preventDefault(); const d = e.deltaY < 0 ? 1 : -1; resize(k === 'w' ? S.w + d : S.w, k === 'h' ? S.h + d : S.h); };
   n.onkeydown = e => { if (e.key === 'ArrowUp' || e.key === 'ArrowDown') { e.preventDefault();
     const d = (e.key === 'ArrowUp' ? 1 : -1) * (e.shiftKey ? 10 : 1);
     resize(k === 'w' ? S.w + d : S.w, k === 'h' ? S.h + d : S.h); } };
 }
-document.querySelector('#secText .sec-head').onclick = () => secText.classList.toggle('open');
+bFloorDn.onclick = () => setFloor(S.activeFloor - 1);
+bFloorUp.onclick = () => setFloor(S.activeFloor + 1);
+document.querySelectorAll('.section.collapsible .sec-head').forEach(h => h.onclick = () => h.parentElement.classList.toggle('open'));
 
-// ---------------------------------------------------------------- toolbar, status, keys
+// ---------------------------------------------------------------- toolbar, session, status, keys
+let flashTimer = 0;
+function flash(msg) { sMsg.textContent = msg; clearTimeout(flashTimer); flashTimer = setTimeout(() => sMsg.textContent = '', 3500); }
+
+bSaveSess.onclick = () => {
+  S.floors[String(S.activeFloor)] = S.cells;
+  ODSession.saveMapToSession({ w: S.w, h: S.h, cells: S.cells, floors: S.floors, activeFloor: S.activeFloor, objects: S.objects });
+  flash(`Saved ${S.w}×${S.h} map (${Object.keys(S.floors).length} floor(s), ${S.objects.length} objects) to Session`);
+};
+bLoadSess.onclick = () => {
+  const m = ODSession.getEffectiveMap();
+  if (!m) { flash('No map in session yet'); return; }
+  checkpoint();
+  S.w = m.w; S.h = m.h;
+  S.activeFloor = m.activeFloor || 0;
+  S.floors = m.floors ? JSON.parse(JSON.stringify(m.floors)) : { [String(S.activeFloor)]: m.cells.slice() };
+  S.cells = S.floors[String(S.activeFloor)] || m.cells.slice();
+  S.objects = JSON.parse(JSON.stringify(m.objects || []));
+  selectedObjId = null;
+  syncControls(); syncFloorUI(); syncObjPanel(); layout(); changed();
+  flash(`Loaded ${S.w}×${S.h} map (${S.objects.length} objects) from Session`);
+};
+
 bUndo.onclick = () => restore(undo, redo);
 bRedo.onclick = () => restore(redo, undo);
-bNew.onclick = () => { checkpoint(); S.cells = new Array(S.w * S.h).fill(0); changed(); };
+bNew.onclick = () => { checkpoint(); S.cells = new Array(S.w * S.h).fill(0); S.objects = []; selectedObjId = null; syncObjPanel(); changed(); };
 bOpen.onclick = () => file.click();
 file.onchange = async () => { if (file.files[0]) importText(await file.files[0].text()); file.value = ''; };
 bExport.onclick = e => { e.stopPropagation(); mExport.classList.toggle('open'); };
 document.addEventListener('click', () => mExport.classList.remove('open'));
 mExport.onclick = async e => {
   const x = e.target.dataset.x; if (!x) return;
-  if (x === 'copy') { try { await navigator.clipboard.writeText(asText()); } catch {} }
+  if (x === 'copy') { try { await navigator.clipboard.writeText(asText()); flash('Copied text'); } catch {} }
   if (x === 'txt') download('map.txt', asText() + '\n');
   if (x === 'json') download('map.json', asJSON());
 };
@@ -464,17 +742,18 @@ sZoom.onclick = resetView;
 document.addEventListener('keyup', e => { if (e.key === ' ') { spaceDown = false; if (!drag) cv.style.cursor = ''; } });
 
 document.addEventListener('keydown', e => {
-  if (e.target.tagName === 'INPUT') return;
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
   if (e.key === ' ') { e.preventDefault(); if (!spaceDown) { spaceDown = true; if (!drag) cv.style.cursor = 'grab'; } return; }
   if (e.key === '0' && !e.metaKey && !e.ctrlKey) { resetView(); return; }
   if ((e.key === '=' || e.key === '+') && !e.metaKey) { zoomTo(S.zoom * 1.25); return; }
   if (e.key === '-' && !e.metaKey) { zoomTo(S.zoom / 1.25); return; }
   const mod = e.metaKey || e.ctrlKey;
   if (mod && e.key.toLowerCase() === 'z') { e.preventDefault(); e.shiftKey ? restore(redo, undo) : restore(undo, redo); return; }
+  if (mod && e.key.toLowerCase() === 's') { e.preventDefault(); bSaveSess.click(); return; }
   if (mod) return;
-  if ('123456'.includes(e.key)) { S.brush = +e.key - 1; buildBrush(); persist(); }
-  const tk = { b: 'pencil', r: 'rect', m: 'room', f: 'fill' }[e.key.toLowerCase()];
-  if (tk) { S.tool = tk; buildTools(); persist(); }
+  if ('123456'.includes(e.key)) { S.brush = +e.key - 1; if (S.tool === 'object') S.tool = 'pencil'; buildBrush(); buildTools(); persist(); }
+  const tk = { b: 'pencil', r: 'rect', m: 'room', f: 'fill', o: 'object' }[e.key.toLowerCase()];
+  if (tk) { S.tool = tk; buildTools(); buildBrush(); persist(); }
   if (e.key.toLowerCase() === 'g') { S.grid = !S.grid; syncGrid(); changed(); }
 });
 
@@ -482,8 +761,9 @@ function changed() {
   draw();
   document.getElementById('text').textContent = asText();
   const n = [0, 0, 0, 0, 0, 0]; S.cells.forEach(v => n[v]++);
-  sCounts.innerHTML = `<b>${n[1]}</b>&nbsp;wall <b>${n[2]}</b>&nbsp;floor <b>${n[3]}</b>&nbsp;door <b>${n[4]}</b>&nbsp;corridor <b>${n[5]}</b>&nbsp;stairs`;
+  sCounts.innerHTML = `<b>F${S.activeFloor}</b> · <b>${n[1]}</b>&nbsp;wall <b>${n[2]}</b>&nbsp;floor <b>${n[3]}</b>&nbsp;door <b>${n[4]}</b>&nbsp;corridor <b>${n[5]}</b>&nbsp;stairs <b>${S.objects.length}</b>&nbsp;obj`;
   sSize.textContent = `${S.w} × ${S.h}`;
+  syncFloorUI();
   persist();
 }
 
@@ -492,7 +772,7 @@ let syncGrid;
 document.fonts.ready.then(() => {
   syncGrid = bindSwitch('swGrid', 'grid');
   bindSwitch('swDouble', 'double');
-  buildBrush(); buildTools(); syncControls(); syncUndo();
+  buildBrush(); buildTools(); syncControls(); syncObjPanel(); syncUndo();
   sZoom.textContent = Math.round(S.zoom * 100) + '%';
   new ResizeObserver(layout).observe(work);
   layout(); changed();
